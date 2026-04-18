@@ -388,48 +388,68 @@
       addLog(`📁 Создана папка: ${path}`);
     } else if (!res.ok) throw new Error(`Ошибка проверки папки ${path}: ${res.status}`);
   }
+  // 🔑 Извлекает короткий ключ из публичной ссылки Яндекс.Диска
+function extractPublicKey(urlOrKey) {
+  if (!urlOrKey.startsWith('http')) return urlOrKey;
+  const match = urlOrKey.match(/(?:disk\.yandex\.ru|yadi\.sk)\/[di]\/([A-Za-z0-9_-]+)/);
+  return match ? match[1] : urlOrKey;
+}
 
   // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ ФАЙЛА
   // Используем надёжную схему: скачать → загрузить
-  async function savePublicFile(publicKeyOrUrl, folderPath, fileName) {
-    updateStatus(`Сохранение: ${fileName}`);
-    addLog(`💾 ${fileName} → ${folderPath}`);
+async function savePublicFile(publicKeyOrUrl, folderPath, fileName) {
+  updateStatus(`Сохранение: ${fileName}`);
+  addLog(`💾 ${fileName} → ${folderPath}`);
 
-    // 1. Получаем информацию о публичном файле
-    const infoRes = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKeyOrUrl)}`, {
-      headers: { 'Authorization': `OAuth ${TOKEN}` },
-      signal: abortController?.signal
-    });
-    if (!infoRes.ok) throw new Error(`Не получен URL скачивания (${infoRes.status})`);
-    const downloadUrl = (await infoRes.json()).href;
+  // 🔑 Извлекаем короткий ключ из полной ссылки
+  const publicKey = extractPublicKey(publicKeyOrUrl);
+  addLog(`🔑 Используем ключ: ${publicKey}`);
 
-    // 2. Скачиваем файл как blob
-    addLog(`📥 Скачивание...`);
-    const fileRes = await fetch(downloadUrl, { signal: abortController?.signal });
-    if (!fileRes.ok) throw new Error(`Ошибка скачивания (${fileRes.status})`);
-    const blob = await fileRes.blob();
-
-    // 3. Получаем URL для загрузки на Диск (полный путь с именем файла!)
-    const fullPath = `${folderPath}/${fileName}`;
-    const uploadRes = await fetch(`${API}/resources/upload?path=${encodeURIComponent(fullPath)}&overwrite=true`, {
-      method: 'POST',
-      headers: { 'Authorization': `OAuth ${TOKEN}` },
-      signal: abortController?.signal
-    });
-    if (!uploadRes.ok) throw new Error(`Не получен URL загрузки (${uploadRes.status})`);
-    const uploadUrl = (await uploadRes.json()).href;
-
-    // 4. Загружаем файл на Диск
-    addLog(`☁️ Загрузка на Диск...`);
-    const putRes = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: blob,
-      signal: abortController?.signal
-    });
-    if (!putRes.ok) throw new Error(`Ошибка загрузки (${putRes.status})`);
-    
-    addLog(`✅ Сохранён: ${fullPath}`);
+  // 1. Получаем информацию о публичном файле (скачивание)
+  const infoRes = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKey)}`, {
+    headers: { 'Authorization': `OAuth ${TOKEN}` },
+    signal: abortController?.signal
+  });
+  if (!infoRes.ok) {
+    const err = await infoRes.text();
+    throw new Error(`Не получен URL скачивания (${infoRes.status}): ${err}`);
   }
+  const downloadUrl = (await infoRes.json()).href;
+  addLog(`📥 URL скачивания получен`);
+
+  // 2. Скачиваем файл как blob
+  const fileRes = await fetch(downloadUrl, { signal: abortController?.signal });
+  if (!fileRes.ok) throw new Error(`Ошибка скачивания (${fileRes.status})`);
+  const blob = await fileRes.blob();
+  addLog(`📦 Файл скачан (${blob.size} байт)`);
+
+  // 3. Получаем URL для загрузки на Диск (полный путь с именем файла!)
+  const fullPath = `${folderPath}/${fileName}`;
+  const uploadRes = await fetch(`${API}/resources/upload?path=${encodeURIComponent(fullPath)}&overwrite=true`, {
+    method: 'POST',
+    headers: { 'Authorization': `OAuth ${TOKEN}` },
+    signal: abortController?.signal
+  });
+  if (!uploadRes.ok) {
+    const err = await uploadRes.text();
+    throw new Error(`Не получен URL загрузки (${uploadRes.status}): ${err}`);
+  }
+  const uploadUrl = (await uploadRes.json()).href;
+
+  // 4. Загружаем файл на Диск
+  addLog(`☁️ Загрузка на Диск...`);
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: blob,
+    signal: abortController?.signal
+  });
+  if (!putRes.ok) {
+    const err = await putRes.text();
+    throw new Error(`Ошибка загрузки (${putRes.status}): ${err}`);
+  }
+  
+  addLog(`✅ Сохранён: ${fullPath}`);
+}
 
   // ========== ОБРАБОТКА ПАПОК ==========
   async function processFolder(publicKeyOrUrl, targetPath) {

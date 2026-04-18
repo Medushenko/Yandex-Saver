@@ -1,3 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>Yandex Saver — Сохранение файлов и папок</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    :root{--bg:#f5f7fa;--card:#fff;--primary:#fc3f1d;--primary-hover:#e6300f;--text:#333;--text-light:#666;--border:#e0e0e0;--success:#4caf50;--error:#f44336}
+    *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    body{background:var(--bg);color:var(--text);padding:20px;min-height:100vh;display:flex;justify-content:center;align-items:flex-start}
+    .container{max-width:800px;width:100%;background:var(--card);padding:24px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+    .header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+    h1{font-size:1.5rem}
+    .step{display:none;margin-top:20px;animation:fadeIn .3s ease}
+    .step.active{display:block}
+    label{display:block;margin-bottom:6px;font-weight:500}
+    input,textarea{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;font-size:16px}
+    button{background:var(--primary);color:#fff;border:none;padding:12px;border-radius:8px;cursor:pointer;width:100%;margin-bottom:8px;font-size:16px}
+    button:hover{background:var(--primary-hover)}
+    button.secondary{background:#666}
+    .hint{font-size:.85rem;color:var(--text-light);margin-bottom:12px}
+    .error-box{background:#ffebee;color:#c62828;padding:12px;border-radius:8px;margin:12px 0}
+    .success-box{background:#e8f5e9;color:#2e7d32;padding:12px;border-radius:8px;margin:12px 0}
+    .log{background:#111;color:#0f0;padding:12px;border-radius:8px;font-family:monospace;font-size:.85rem;height:250px;overflow-y:auto;margin-top:16px;white-space:pre-wrap;word-break:break-all}
+    .progress-bar{width:100%;height:8px;background:#eee;border-radius:4px;margin:12px 0;overflow:hidden}
+    .progress-fill{height:100%;background:var(--primary);width:0%}
+    .user-info{display:flex;justify-content:space-between;padding:10px;background:#f9f9f9;border-radius:8px;margin-bottom:16px}
+    .status-panel{background:#f0f2f5;padding:12px;border-radius:8px;margin-bottom:16px}
+    .status-panel span{font-weight:bold;color:var(--primary)}
+    .folder-browser{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:12px;max-height:300px;overflow-y:auto}
+    .folder-item{padding:8px 12px;cursor:pointer;border-bottom:1px solid #eee;display:flex;align-items:center;gap:8px}
+    .folder-item:hover{background:#f5f5f5}
+    .folder-item .name{flex:1}
+    .new-folder-btn{background:var(--primary);color:white;border:none;padding:8px 12px;border-radius:20px;cursor:pointer;margin-top:8px;width:auto}
+    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
+    .modal-content{background:white;padding:20px;border-radius:16px;width:300px}
+    .copy-log-btn{background:#4a6a8a;margin-top:8px;width:auto}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header"><h1>Yandex Saver</h1></div>
+  <div class="hint">Сохранение файлов и папок с публичных ссылок на ваш Яндекс.Диск</div>
+
+  <div id="user-block" class="user-info" style="display:none;">
+    <span>✅ Диск подключён</span>
+    <button onclick="logout()" style="width:auto;padding:6px 12px;background:var(--error)">Выйти</button>
+  </div>
+
+  <div id="step-auth" class="step active">
+    <label>1. Подключите Яндекс.Диск</label>
+    <button id="authPopupBtn">🔑 Авторизоваться (popup)</button>
+    <div id="auth-message"></div>
+  </div>
+
+  <div id="step-folder" class="step">
+    <label>2. Папка назначения</label>
+    <div style="display: flex; gap: 8px;">
+      <input type="text" id="folder-input" value="/saved-materials" style="flex:1;">
+      <button id="browseFolderBtn" style="width: auto; padding: 12px 16px;">📂 Обзор</button>
+    </div>
+    <div id="folder-browser" class="folder-browser" style="display: none;"></div>
+    <button onclick="validateAndCreateFolder()">📁 Проверить и создать</button>
+    <div id="folder-status" class="hint"></div>
+    <button id="btn-next-links" style="display:none;" onclick="goToStep('step-links')">Далее →</button>
+  </div>
+
+  <div id="step-links" class="step">
+    <label>3. Вставьте текст со ссылками</label>
+    <textarea id="links-input" rows="6" placeholder="Вставьте любое сообщение. Ссылки вида https://disk.yandex.ru/i/... или https://disk.yandex.ru/d/... будут автоматически извлечены."></textarea>
+    <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
+    <button id="btn-stop" class="secondary" style="display:none;" onclick="stopProcess()">⏹ Остановить</button>
+    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    <div id="progress-text" style="text-align:center;margin-bottom:8px;"></div>
+  </div>
+
+  <div class="status-panel">📋 Статус: <span id="current-status">Ожидание</span></div>
+  <div id="log" class="log"></div>
+  <button id="copyLogBtn" class="copy-log-btn">📋 Копировать лог</button>
+</div>
+
+<!-- Модальное окно для создания папки -->
+<div id="newFolderModal" class="modal">
+  <div class="modal-content">
+    <h3>Создать папку</h3>
+    <input type="text" id="newFolderName" placeholder="Имя папки">
+    <button id="confirmNewFolderBtn">Создать</button>
+    <button id="cancelNewFolderBtn">Отмена</button>
+  </div>
+</div>
+
 <script>
   // ---------- КОНФИГУРАЦИЯ ----------
   const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
@@ -8,7 +100,7 @@
   let isRunning = false;
   let abortController = null;
   let popup = null;
-  let popupTimer = null;                          // ИСПРАВЛЕНО: таймер для очистки
+  let popupTimer = null;
   let processedPublicKeys = new Set();
 
   // ---------- POPUP АВТОРИЗАЦИЯ ----------
@@ -25,7 +117,6 @@
       return;
     }
     window.addEventListener('message', receiveTokenFromPopup);
-    // ИСПРАВЛЕНО: сохраняем таймер для очистки
     popupTimer = setTimeout(() => {
       if (popup && !popup.closed) {
         popup.close();
@@ -39,7 +130,6 @@
   function receiveTokenFromPopup(event) {
     if (event.origin !== window.location.origin) return;
     if (event.data && event.data.type === 'yandex_token') {
-      // ИСПРАВЛЕНО: очищаем таймер
       if (popupTimer) {
         clearTimeout(popupTimer);
         popupTimer = null;
@@ -268,7 +358,6 @@
       });
       if (res.status === 404) {
         addLog('Папка не найдена, создаю...');
-        // ИСПРАВЛЕНО: добавлен mkdir для создания промежуточных папок (необязательно для PUT папки, но безопасно)
         const createRes = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, {
           method: 'PUT',
           headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -296,37 +385,19 @@
 
   // ---------- ИЗВЛЕЧЕНИЕ ПУБЛИЧНЫХ ССЫЛОК (УЛУЧШЕНО) ----------
   function extractAllPublicLinks(text) {
-    // ИСПРАВЛЕНО: используем URL API для надёжного извлечения ключа
     const urlRegex = /https?:\/\/(?:disk\.yandex\.ru|yadi\.sk)\/[^\s]+/gi;
     const urls = text.match(urlRegex) || [];
-    const keys = new Set();
-    for (const rawUrl of urls) {
-      try {
-        const url = new URL(rawUrl);
-        const pathParts = url.pathname.split('/');
-        // ищем сегмент 'i' или 'd', следующий за ними — публичный ключ
-        const idx = pathParts.findIndex(part => part === 'i' || part === 'd');
-        if (idx !== -1 && pathParts[idx+1]) {
-          const key = pathParts[idx+1];
-          addLog(`🔍 Извлечён ключ: ${key} из URL: ${rawUrl}`);
-          keys.add(key);
-        } else {
-          addLog(`⚠️ Не удалось извлечь ключ из URL: ${rawUrl}`);
-        }
-      } catch (e) {
-        addLog(`⚠️ Ошибка парсинга URL: ${rawUrl}`);
-      }
-    }
-    return Array.from(keys);
+    const uniqueUrls = [...new Set(urls)];
+    uniqueUrls.forEach(url => addLog(`🔍 Найдена ссылка: ${url}`));
+    return uniqueUrls;
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ (БЕЗ AUTHORIZATION ДЛЯ PUBLIC) ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
     });
     if (res.status === 404) {
-      // ИСПРАВЛЕНО: добавляем mkdir для вложенных папок
       const create = await fetch(`${API}/resources?path=${encodeURIComponent(path)}&mkdir=true`, {
         method: 'PUT',
         headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -336,11 +407,13 @@
     } else if (!res.ok) throw new Error(`Ошибка проверки папки ${path}: ${res.status}`);
   }
 
-  async function saveFile(publicKey, targetPath, fileName) {
-    const headers = { 'Authorization': `OAuth ${TOKEN}` };
+  async function saveFile(publicKeyOrUrl, targetPath, fileName) {
     updateStatus(`Скачивание: ${fileName}`);
     addLog(`📥 Скачивание файла: ${fileName}`);
-    const dlInfo = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKey)}`, { headers, signal: abortController?.signal });
+    // Скачивание публичного файла (без токена)
+    const dlInfo = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKeyOrUrl)}`, {
+      signal: abortController?.signal
+    });
     if (!dlInfo.ok) throw new Error(`Не удалось получить ссылку на скачивание: ${dlInfo.status}`);
     const dlData = await dlInfo.json();
     const fileResp = await fetch(dlData.href, { signal: abortController?.signal });
@@ -348,8 +421,11 @@
     const blob = await fileResp.blob();
     const fullPath = `${targetPath}/${fileName}`;
     updateStatus(`Загрузка на Диск: ${fullPath}`);
+    // Загрузка в личное хранилище (с токеном)
     const uploadReq = await fetch(`${API}/resources/upload?path=${encodeURIComponent(fullPath)}&overwrite=true&mkdir=true`, {
-      method: 'POST', headers, signal: abortController?.signal
+      method: 'POST',
+      headers: { 'Authorization': `OAuth ${TOKEN}` },
+      signal: abortController?.signal
     });
     if (!uploadReq.ok) throw new Error(`Не удалось получить URL загрузки: ${uploadReq.status}`);
     const uploadUrl = (await uploadReq.json()).href;
@@ -358,50 +434,51 @@
     addLog(`✅ Файл сохранён: ${fullPath}`);
   }
 
-  async function processFolder(publicKey, targetPath) {
+  async function processFolder(publicKeyOrUrl, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
-    if (processedPublicKeys.has(publicKey)) {
-      addLog(`⚠️ Папка с ключом ${publicKey.substring(0, 20)}... уже обработана, пропускаем (цикл)`);
+    if (processedPublicKeys.has(publicKeyOrUrl)) {
+      addLog(`⚠️ Папка уже обработана, пропускаем (цикл)`);
       return;
     }
-    processedPublicKeys.add(publicKey);
+    processedPublicKeys.add(publicKeyOrUrl);
     addLog(`📂 Обработка папки: ${targetPath}`);
     updateStatus(`Обработка папки: ${targetPath}`);
     await ensureFolder(targetPath);
 
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
+    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKeyOrUrl)}&limit=1000`;
     let hasMore = true;
     while (hasMore && isRunning) {
       addLog(`🔍 Запрос к API: ${url.substring(0, 100)}...`);
-      const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
+      // Запрос к публичному ресурсу (без токена)
+      const resp = await fetch(url, { signal: abortController?.signal });
       if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
       const data = await resp.json();
       const items = data._embedded?.items || [];
       const fileCount = items.filter(i => i.type === 'file').length;
       const dirCount = items.filter(i => i.type === 'dir').length;
       addLog(`📊 В папке найдено: ${fileCount} файлов, ${dirCount} подпапок`);
-      if (items.length === 0) {
-        addLog(`⚠️ Папка пуста.`);
-      }
+      
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
-          if (!item.public_key) {
+          if (!item.public_key && !item.file) {
             addLog(`⚠️ У файла ${item.name} нет public_key, пропускаем.`);
             continue;
           }
-          await saveFile(item.public_key, targetPath, item.name);
+          // Используем public_key элемента, либо если его нет, пытаемся взять из URL файла
+          const filePublicKey = item.public_key || publicKeyOrUrl + '?path=' + encodeURIComponent(item.path);
+          await saveFile(filePublicKey, targetPath, item.name);
         } else if (item.type === 'dir') {
-          if (item.public_key === publicKey) {
+          if (item.public_key === publicKeyOrUrl) {
             addLog(`⚠️ Обнаружена циклическая ссылка на папку ${item.name}, пропускаем`);
             continue;
           }
-          await processFolder(item.public_key, `${targetPath}/${item.name}`);
+          await processFolder(item.public_key || publicKeyOrUrl + '/' + item.name, `${targetPath}/${item.name}`);
         } else {
           addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
         }
       }
-      // ИСПРАВЛЕНО: используем next из ответа для правильной пагинации
+      
       hasMore = !!(data._embedded?.next || data.next);
       url = data._embedded?.next || data.next || '';
       if (hasMore && !url) {
@@ -411,30 +488,31 @@
     }
   }
 
-  async function processPublicLink(publicKey, targetPath) {
-    if (processedPublicKeys.has(publicKey)) {
-      addLog(`⚠️ Ресурс с ключом ${publicKey.substring(0,20)}... уже обработан, пропускаем`);
+  async function processPublicLink(publicUrl, targetPath) {
+    if (processedPublicKeys.has(publicUrl)) {
+      addLog(`⚠️ Ресурс уже обработан, пропускаем`);
       return;
     }
-    const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicKey)}`, {
-      headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
+    // Запрос к публичному ресурсу (без токена)
+    const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, {
+      signal: abortController?.signal
     });
     if (!metaResp.ok) {
-      addLog(`⚠️ Ошибка получения информации (${metaResp.status}) для ключа ${publicKey}`);
+      addLog(`⚠️ Ошибка получения информации (${metaResp.status}) для ${publicUrl}`);
       return;
     }
     const meta = await metaResp.json();
-    processedPublicKeys.add(publicKey); // помечаем как обработанный
+    processedPublicKeys.add(publicUrl);
+    
     if (meta.type === 'file') {
-      await saveFile(publicKey, targetPath, meta.name);
+      await saveFile(publicUrl, targetPath, meta.name);
     } else if (meta.type === 'dir') {
-      await processFolder(publicKey, targetPath);
+      await processFolder(publicUrl, targetPath);
     } else if (meta._embedded?.items || meta.items) {
-      addLog(`📂 Обнаружена папка (по наличию items) для ключа ${publicKey}`);
-      await processFolder(publicKey, targetPath);
+      addLog(`📂 Обнаружена папка для ${publicUrl}`);
+      await processFolder(publicUrl, targetPath);
     } else {
-      addLog(`⚠️ Неизвестный тип ресурса для ключа ${publicKey}`);
-      addLog(`   Ответ API: ${JSON.stringify(meta).substring(0, 200)}...`);
+      addLog(`⚠️ Неизвестный тип ресурса: ${JSON.stringify(meta).substring(0, 200)}`);
     }
   }
 
@@ -442,8 +520,8 @@
   async function startProcess() {
     const raw = document.getElementById('links-input').value.trim();
     if (!raw) return alert('Вставьте текст со ссылками');
-    const keys = extractAllPublicLinks(raw);
-    if (!keys.length) return alert('Не найдено ни одной публичной ссылки на Яндекс.Диск');
+    const links = extractAllPublicLinks(raw);
+    if (!links.length) return alert('Не найдено ни одной публичной ссылки на Яндекс.Диск');
 
     if (!TARGET_FOLDER) {
       await validateAndCreateFolder();
@@ -455,19 +533,18 @@
     processedPublicKeys.clear();
     document.getElementById('btn-start').disabled = true;
     document.getElementById('btn-stop').style.display = 'block';
-    addLog(`🚀 Найдено уникальных ресурсов: ${keys.length}`);
+    addLog(`🚀 Найдено уникальных ссылок: ${links.length}`);
     updateStatus(`Начинаем обработку...`);
 
     let success = 0;
-    for (let i = 0; i < keys.length; i++) {
+    for (let i = 0; i < links.length; i++) {
       if (!isRunning) break;
-      document.getElementById('progress-text').innerText = `${i+1}/${keys.length}`;
-      document.getElementById('progress-fill').style.width = `${(i/keys.length)*100}%`;
+      document.getElementById('progress-text').innerText = `${i+1}/${links.length}`;
+      document.getElementById('progress-fill').style.width = `${(i/links.length)*100}%`;
       try {
-        await processPublicLink(keys[i], TARGET_FOLDER);
+        await processPublicLink(links[i], TARGET_FOLDER);
         success++;
       } catch (e) {
-        // ИСПРАВЛЕНО: отдельная обработка AbortError
         if (e.name === 'AbortError' || e.message === 'Остановлено') {
           addLog('⏹ Остановлено пользователем');
           break;
@@ -475,14 +552,14 @@
         addLog(`❌ Ошибка #${i+1}: ${e.message}`);
         updateStatus(`Ошибка: ${e.message}`);
       }
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 500)); // небольшая задержка между ссылками
     }
     document.getElementById('progress-fill').style.width = '100%';
-    document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${keys.length}`;
+    document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${links.length}`;
     document.getElementById('btn-start').disabled = false;
     document.getElementById('btn-stop').style.display = 'none';
     isRunning = false;
-    updateStatus(success === keys.length ? 'Завершено успешно' : 'Завершено с ошибками');
+    updateStatus(success === links.length ? 'Завершено успешно' : 'Завершено с ошибками');
   }
 
   function stopProcess() {
@@ -492,3 +569,5 @@
     updateStatus('Остановка...');
   }
 </script>
+</body>
+</html>

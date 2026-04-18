@@ -73,6 +73,10 @@
       border-radius: 16px;
       width: 300px;
     }
+    .copy-log-btn {
+      background: #4a6a8a;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -114,6 +118,7 @@
 
   <div class="status-panel">📋 Статус: <span id="current-status">Ожидание</span></div>
   <div id="log" class="log"></div>
+  <button id="copyLogBtn" class="copy-log-btn" style="width: auto; margin-top: 8px;">📋 Копировать лог</button>
 </div>
 
 <!-- Модальное окно для создания папки -->
@@ -215,7 +220,21 @@
     }
     document.getElementById('authPopupBtn').addEventListener('click', startOAuthPopup);
     document.getElementById('browseFolderBtn').addEventListener('click', showFolderBrowser);
+    document.getElementById('copyLogBtn').addEventListener('click', copyLog);
   });
+
+  function copyLog() {
+    const logText = document.getElementById('log').innerText;
+    if (!logText) {
+      alert('Лог пуст');
+      return;
+    }
+    navigator.clipboard.writeText(logText).then(() => {
+      addLog('📋 Лог скопирован в буфер обмена');
+    }).catch(() => {
+      alert('Не удалось скопировать лог');
+    });
+  }
 
   function onAuthSuccess() {
     showMessage('success', '✅ Яндекс.Диск подключён');
@@ -447,12 +466,12 @@
     const limit = 1000;
     let hasMore = true;
     while (hasMore && isRunning) {
-      // Запрашиваем содержимое публичной папки
       const url = `${API}/resources/public?public_key=${publicKey}&limit=${limit}&offset=${offset}`;
       const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
       if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
       const data = await resp.json();
-      const items = data._embedded?.items || data.items || []; // на случай разных форматов
+      // API может вернуть items как напрямую, так и внутри _embedded
+      const items = data._embedded?.items || data.items || [];
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
@@ -463,7 +482,7 @@
           addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
         }
       }
-      hasMore = !!data._embedded?.next || !!data.next;
+      hasMore = !!(data._embedded?.next || data.next);
       offset += limit;
     }
   }
@@ -484,8 +503,8 @@
       await saveFile(publicKey, targetPath, meta.name);
     } else if (meta.type === 'dir') {
       await processFolder(publicKey, targetPath);
-    } else if (meta.items || meta._embedded?.items) {
-      // Если ответ содержит список items — это папка (некоторые версии API)
+    } else if (meta._embedded?.items || meta.items) {
+      // Если ответ содержит список items — это папка (публичная папка в API)
       addLog(`📂 Обнаружена папка (по наличию items) для ключа ${publicKey}`);
       await processFolder(publicKey, targetPath);
     } else {

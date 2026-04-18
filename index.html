@@ -49,7 +49,7 @@
 
     <div id="step-auth" class="step active">
       <label>1. Подключите Яндекс.Диск</label>
-      <div class="hint">Нажмите кнопку → войдите в <strong>свой</strong> аккаунт → нажмите <strong>"Разрешить"</strong> (не "Отменить"!).</div>
+      <div class="hint">Нажмите кнопку → войдите в аккаунт → нажмите <strong>"Разрешить"</strong>.</div>
       <button id="btn-auth" onclick="startOAuth()">🔑 Подключить Яндекс.Диск</button>
       <div id="auth-message"></div>
     </div>
@@ -85,56 +85,37 @@
     let isRunning = false;
     let abortController = null;
 
-    // Проверка при загрузке страницы
     window.addEventListener('DOMContentLoaded', async () => {
       log('🔍 Проверка состояния...');
-      
-      // Проверяем, есть ли токен в URL (после редиректа от Яндекса)
       const hash = window.location.hash;
-      log(`Hash в URL: ${hash || '(пусто)'}`);
+      log(`Hash: ${hash || '(пусто)'}`);
       
       if (hash && hash.includes('access_token=')) {
         const match = hash.match(/access_token=([^&]+)/);
         if (match) {
           TOKEN = decodeURIComponent(match[1]);
           sessionStorage.setItem('ydisk_token', TOKEN);
-          // Очищаем URL
           history.replaceState(null, '', window.location.pathname + window.location.search);
-          log('✅ Токен получен! Проверка доступа...');
+          log('✅ Токен получен!');
           await onAuthSuccess();
         } else {
-          log('❌ Токен не найден в URL');
-          showMessage('error', '❌ Ошибка: токен не получен. Попробуйте ещё раз.');
+          log('❌ Токен не найден');
+          showMessage('error', '❌ Ошибка авторизации. Попробуйте ещё раз.');
         }
       } else if (TOKEN) {
-        // Проверяем валидность сохранённого токена
-        log('📋 Найден сохранённый токен, проверяю...');
+        log('📋 Проверка сохранённого токена...');
         try {
-          const test = await fetch(`${API}/`, { 
-            headers: { 'Authorization': `OAuth ${TOKEN}` } 
-          });
-          if (test.ok) {
-            log('✅ Токен действителен');
-            await onAuthSuccess();
-          } else {
-            log('❌ Токен недействителен, удаляю');
-            logout();
-          }
-        } catch (e) {
-          log(`❌ Ошибка проверки токена: ${e.message}`);
-          logout();
-        }
-      } else {
-        log('⚠️ Токен не найден. Требуется авторизация.');
+          const test = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
+          if (test.ok) await onAuthSuccess();
+          else logout();
+        } catch { logout(); }
       }
     });
 
     async function onAuthSuccess() {
-      showMessage('success', '✅ Успешно подключено к Яндекс.Диску!');
+      showMessage('success', '✅ Успешно подключено!');
       document.getElementById('user-block').style.display = 'flex';
-      setTimeout(() => {
-        goToStep('step-folder');
-      }, 1000);
+      setTimeout(() => goToStep('step-folder'), 1000);
     }
 
     function goToStep(id) {
@@ -149,26 +130,20 @@
       const container = document.getElementById('auth-message');
       container.innerHTML = '';
       container.appendChild(div);
-      setTimeout(() => div.remove(), 5000);
     }
 
     function log(msg) {
       const el = document.getElementById('log');
       el.style.display = 'block';
-      const time = new Date().toLocaleTimeString('ru-RU');
-      el.textContent += `[${time}] ${msg}\n`;
+      el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
       el.scrollTop = el.scrollHeight;
     }
 
     function startOAuth() {
-      log('🚀 Начало авторизации...');
-      log(`Client ID: ${CLIENT_ID}`);
-      log(`Redirect URI: ${REDIRECT_URI}`);
-      
-      const scope = 'disk:read disk:write';
+      // ДОБАВИЛИ login:info - это часто решает проблему invalid_scope
+      const scope = 'login:info disk:read disk:write';
       const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${encodeURIComponent(CLIENT_ID)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`;
-      
-      log(`Переход по URL: ${url.substring(0, 100)}...`);
+      log('🚀 Переход к авторизации...');
       window.location.href = url;
     }
 
@@ -178,29 +153,22 @@
       document.getElementById('user-block').style.display = 'none';
       document.getElementById('log').textContent = '';
       goToStep('step-auth');
-      log('🔓 Вы вышли из аккаунта');
     }
 
     async function validateFolder() {
       const input = document.getElementById('folder-input').value.trim();
       TARGET_FOLDER = input.startsWith('/') ? input : '/' + input;
-      log(`📁 Проверка папки: ${TARGET_FOLDER}`);
-      
+      log(`📁 Проверка: ${TARGET_FOLDER}`);
       try {
         const res = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, {
           headers: { 'Authorization': `OAuth ${TOKEN}` }
         });
-        
-        if (res.status === 404) {
-          log('⚠️ Папка не найдена, будет создана');
-        } else if (res.ok) {
+        if (res.status === 404) log('⚠️ Папка будет создана');
+        else if (res.ok) {
           const d = await res.json();
           if (d.type !== 'dir') throw new Error('Это не папка');
           log('✅ Папка существует');
-        } else {
-          throw new Error(`Ошибка ${res.status}`);
         }
-        
         document.getElementById('folder-status').textContent = `✅ Готово: ${TARGET_FOLDER}`;
         document.getElementById('folder-status').style.color = 'var(--success)';
         document.getElementById('btn-next-links').style.display = 'block';
@@ -218,16 +186,15 @@
     async function startProcess() {
       const raw = document.getElementById('links-input').value.trim();
       if (!raw) return alert('Вставьте ссылки');
-      
       const urls = raw.split(/\n/).map(u => u.trim()).filter(Boolean);
       const keys = urls.map(parsePublicUrl).filter(Boolean);
-      if (keys.length === 0) return alert('Не удалось распознать ссылки');
+      if (keys.length === 0) return alert('Ссылки не распознаны');
 
       isRunning = true;
       abortController = new AbortController();
       document.getElementById('btn-start').disabled = true;
       document.getElementById('btn-stop').style.display = 'block';
-      log(`🚀 Найдено файлов: ${keys.length}`);
+      log(`🚀 Файлов: ${keys.length}`);
 
       let success = 0;
       for (let i = 0; i < keys.length; i++) {
@@ -237,12 +204,9 @@
         try {
           await saveItem(keys[i], i + 1, keys.length);
           success++;
-        } catch (e) {
-          log(`❌ Ошибка #${i + 1}: ${e.message}`);
-        }
+        } catch (e) { log(`❌ Ошибка #${i+1}: ${e.message}`); }
         await new Promise(r => setTimeout(r, 500));
       }
-      
       document.getElementById('progress-fill').style.width = '100%';
       document.getElementById('progress-text').textContent = `✅ Готово: ${success}/${keys.length}`;
       document.getElementById('btn-start').disabled = false;
@@ -258,36 +222,26 @@
 
     async function saveItem(publicKey, current, total) {
       const headers = { 'Authorization': `OAuth ${TOKEN}` };
-      log(`📥 [${current}/${total}] Получение информации...`);
-      
-      const infoRes = await fetch(`${API}/resources/public/download?public_key=${publicKey}`, { 
-        headers, signal: abortController?.signal 
-      });
+      log(`📥 [${current}/${total}] Информация...`);
+      const infoRes = await fetch(`${API}/resources/public/download?public_key=${publicKey}`, { headers, signal: abortController?.signal });
       if (!infoRes.ok) throw new Error(`API: ${infoRes.status}`);
-      
       const info = await infoRes.json();
-      if (info.type === 'dir') throw new Error('Это папка, а не файл');
+      if (info.type === 'dir') throw new Error('Это папка');
       
       const fileName = info.name || `file_${publicKey}`;
       log(`💾 Скачивание: ${fileName}`);
-      
       const dlRes = await fetch(info.href, { signal: abortController?.signal });
-      if (!dlRes.ok) throw new Error('Не удалось скачать');
+      if (!dlRes.ok) throw new Error('Ошибка скачивания');
       const blob = await dlRes.blob();
       
       const path = `${TARGET_FOLDER}/${fileName}`;
-      const upRes = await fetch(`${API}/resources/upload?path=${encodeURIComponent(path)}&overwrite=true`, { 
-        method: 'POST', headers, signal: abortController?.signal 
-      });
-      if (!upRes.ok) throw new Error('Не получен URL загрузки');
+      const upRes = await fetch(`${API}/resources/upload?path=${encodeURIComponent(path)}&overwrite=true`, { method: 'POST', headers, signal: abortController?.signal });
+      if (!upRes.ok) throw new Error('Ошибка загрузки');
       const uploadUrl = (await upRes.json()).href;
       
       log(`☁️ Загрузка на Диск...`);
-      const putRes = await fetch(uploadUrl, { 
-        method: 'PUT', body: blob, signal: abortController?.signal 
-      });
+      const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, signal: abortController?.signal });
       if (!putRes.ok) throw new Error(`Загрузка: ${putRes.status}`);
-      
       log(`✅ ${fileName} сохранён`);
     }
   </script>

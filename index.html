@@ -1,139 +1,39 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-  <title>Yandex Saver — Сохранение файлов и папок</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <style>
-    :root {
-      --bg: #f5f7fa;
-      --card: #fff;
-      --primary: #fc3f1d;
-      --primary-hover: #e6300f;
-      --text: #333;
-      --text-light: #666;
-      --border: #e0e0e0;
-      --success: #4caf50;
-      --error: #f44336;
-      --warning: #ff9800;
-    }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    /* Остальные CSS-правила (сокращены для краткости) */
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yandex Saver - Извлечение и сохранение ссылок</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="container">
-    <!-- HTML-разметка (шапка, этапы, поля ввода, кнопки и т.д.) -->
-    <!-- ... (исходный HTML оставлен без изменений, кроме исправления display:none → display: none) -->
-  </div>
+    <div class="container">
+        <h1>Yandex Saver</h1>
+        
+        <div class="auth-section">
+            <button id="authBtn" class="btn">Авторизоваться в Яндекс</button>
+            <span id="authStatus"></span>
+        </div>
 
-  <!-- Модальное окно создания папки -->
-  <div id="newFolderModal" class="modal">
-    <div class="modal-content">
-      <h3 style="margin-bottom:18px">➕ Создать папку</h3>
-      <input type="text" id="newFolderName" placeholder="Имя новой папки" style="margin-bottom:18px">
-      <div style="display:flex;gap:10px;justify-content:flex-end">
-        <button id="cancelNewFolderBtn" class="secondary" style="width:auto;margin:0">Отмена</button>
-        <button id="confirmNewFolderBtn" style="width:auto;margin:0">Создать</button>
-      </div>
+        <div class="input-section">
+            <h2>Вставьте текст с ссылками:</h2>
+            <textarea id="inputText" placeholder="Вставьте сюда текст с внешними ссылками..."></textarea>
+            <button id="extractBtn" class="btn" disabled>Извлечь ссылки</button>
+        </div>
+
+        <div class="links-section">
+            <h2>Найденные ссылки:</h2>
+            <div id="linksList"></div>
+            <button id="downloadBtn" class="btn" disabled>Скачать на Яндекс Диск</button>
+        </div>
+
+        <div class="status-section">
+            <h2>Статус выполнения:</h2>
+            <iframe id="statusFrame" class="status-frame"></iframe>
+            <button id="copyLogBtn" class="btn">Копировать лог</button>
+        </div>
     </div>
-  </div>
 
-  <script>
-    // Конфигурация
-    const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
-    const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
-    const API = 'https://cloud-api.yandex.net/v1/disk';
-
-    // Глобальные переменные
-    let TOKEN = sessionStorage.getItem('ydisk_token') || '';
-    let TARGET_FOLDER = '';
-    let isRunning = false;
-    let abortController = null;
-    let popup = null;
-    let popupTimer = null;
-
-    // Управление этапами
-    function updateStage(stageNum) {
-      // ... (логика обновления индикаторов этапов)
-    }
-
-    function goToStep(stepId) {
-      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-      document.getElementById(stepId).classList.add('active');
-    }
-
-    // Авторизация через popup
-    function startOAuthPopup() {
-      // ... (открытие окна авторизации, обработка сообщений)
-    }
-
-    async function verifyTokenAndProceed(token) {
-      try {
-        const test = await fetch(`${API}/`, {
-          headers: { 'Authorization': `OAuth ${token}` },
-          method: 'GET'
-        });
-        if (test.ok) {
-          TOKEN = token;
-          sessionStorage.setItem('ydisk_token', TOKEN);
-          onAuthSuccess();
-        } else {
-          const errText = await test.text().catch(() => '');
-          addLog(`❌ Токен отклонён: ${test.status} ${errText.slice(0,100)}`);
-          logout();
-        }
-      } catch (e) {
-        addLog(`❌ Ошибка проверки токена: ${e.message}`);
-        logout();
-      }
-    }
-
-    // Инициализация
-    window.addEventListener('DOMContentLoaded', async () => {
-      // Привязка обработчиков событий
-      document.getElementById('authPopupBtn').addEventListener('click', startOAuthPopup);
-      // ...
-    });
-
-    // Вспомогательные функции
-    function addLog(message) {
-      const log = document.getElementById('log');
-      log.textContent += message + '\n';
-      log.scrollTop = log.scrollHeight; // Прокрутка вниз
-    }
-
-    function updateStatus(text) {
-      document.getElementById('current-status').textContent = text;
-    }
-
-    function logout() {
-      sessionStorage.removeItem('ydisk_token');
-      TOKEN = '';
-      document.getElementById('user-block').style.display = 'none';
-      goToStep('step-auth');
-      updateStage(1);
-      addLog('🚫 Пользователь вышел из системы');
-      updateStatus('Не авторизован');
-    }
-
-    function showMessage(type, text) {
-      const container = document.getElementById('auth-message');
-      container.innerHTML = '';
-      const div = document.createElement('div');
-      div.className = `message-${type}`; // success/error/warning
-      div.textContent = text;
-      container.appendChild(div);
-    }
-
-    // Остальные функции (validateAndCreateFolder, startProcess и т.д.)
-    // должны быть реализованы согласно бизнес-логике приложения.
-  </script>
+    <script src="js/app.js"></script>
 </body>
 </html>

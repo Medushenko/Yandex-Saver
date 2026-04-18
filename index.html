@@ -1,86 +1,92 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yandex Saver</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <meta name="theme-color" content="#fc3f1d">
-  <style>
-    :root{--bg:#f5f7fa;--card:#fff;--primary:#fc3f1d;--text:#333;--border:#e0e0e0;--error:#f44336;--success:#4caf50}
-    *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-    body{background:var(--bg);color:var(--text);padding:20px;min-height:100vh;display:flex;justify-content:center}
-    .container{max-width:600px;width:100%;background:var(--card);padding:24px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
-    .header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-    .header-icon{width:48px;height:48px}
-    h1{font-size:1.5rem}
-    .step{display:none;margin-top:20px}
-    .step.active{display:block}
-    label{display:block;margin-bottom:6px;font-weight:500}
-    input,textarea{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px}
-    button{background:var(--primary);color:#fff;border:none;padding:12px;border-radius:8px;cursor:pointer;width:100%;margin-bottom:8px}
-    button:hover{background:#e6300f}
-    .hint{font-size:.85rem;color:#666;margin-bottom:12px}
-    .error-box{background:#ffebee;color:#c62828;padding:16px;border-radius:8px;margin:12px 0}
-    .error-box code{background:#ffcdd2;padding:2px 6px;border-radius:4px;font-family:monospace}
-    .log{background:#111;color:#0f0;padding:12px;border-radius:8px;font-family:monospace;font-size:.85rem;height:250px;overflow-y:auto;margin-top:16px;white-space:pre-wrap}
-    .user-info{display:flex;justify-content:space-between;padding:10px;background:#f9f9f9;border-radius:8px;margin-bottom:16px}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yandex Saver</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <img src="favicon.svg" alt="Icon" class="header-icon">
-      <h1>Yandex Saver</h1>
+    <div class="container">
+        <h1>Yandex Saver</h1>
+        <p>Сохранение файлов и папок с публичных ссылок на ваш Яндекс.Диск</p>
+
+        <div id="auth-section">
+            <button id="auth-button">🔑 Авторизоваться</button>
+            <div id="auth-status">Диск не подключён</div>
+        </div>
+
+        <div id="folder-section" style="display:none;">
+            <h2>📁 Папка назначения</h2>
+            <input type="text" id="folder-path" placeholder="Введите путь к папке">
+            <button id="create-folder">Проверить и создать</button>
+        </div>
+
+        <div id="links-section" style="display:none;">
+            <h2>🚀 Вставьте ссылки</h2>
+            <textarea id="links-input" rows="5" placeholder="Вставьте ссылки"></textarea>
+            <button id="start-button">Начать сохранение</button>
+            <button id="stop-button">Остановить</button>
+        </div>
+
+        <div class="status" id="status">
+            📋 Статус: Ожидание
+        </div>
     </div>
-    <div class="hint">Сохранение файлов на ваш Яндекс.Диск</div>
 
-    <div id="user-block" class="user-info" style="display:none;">
-      <span>✅ Подключено</span>
-      <button onclick="logout()" style="width:auto;background:var(--error)">Выйти</button>
-    </div>
-
-    <div id="step-auth" class="step active">
-      <label>1. Подключите Яндекс.Диск</label>
-      <button onclick="startOAuth()">🔑 Подключить</button>
-      <div id="error-container"></div>
-    </div>
-
-    <div id="step-folder" class="step">
-      <label>2. Папка</label>
-      <input type="text" id="folder-input" value="/saved-materials">
-      <button onclick="validateFolder()">Проверить</button>
-      <div id="folder-status" class="hint"></div>
-      <button id="btn-next" style="display:none;margin-top:12px;" onclick="goToStep('step-links')">Далее →</button>
-    </div>
-
-    <div id="step-links" class="step">
-      <label>3. Ссылки</label>
-      <textarea id="links-input" rows="6" placeholder="https://disk.yandex.ru/i/..."></textarea>
-      <button onclick="startProcess()">🚀 Начать</button>
-      <div class="log" id="log" style="display:none;"></div>
-    </div>
-  </div>
-
-  <script>
-    const CLIENT_ID = '89ec41a83e4e47328b3fa1e7b818c402';
-    const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
-    const API = 'https://cloud-api.yandex.net/v1/disk';
-    let TOKEN = sessionStorage.getItem('ydisk_token') || '';
-    let TARGET_FOLDER = '';
-
-    // 🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПРИ ЗАГРУЗКЕ
-    window.addEventListener('DOMContentLoaded', () => {
-      const hash = window.location.hash;
-      log('📍 Полный URL: ' + window.location.href);
-      log('📍 Hash: ' + (hash || '(пусто)'));
-      
-      // Проверяем на ошибки в URL
-      if (hash && hash.includes('error=')) {
-        const errorMatch = hash.match(/error=([^&]+)/);
-        const descMatch = hash.match(/error_description=([^&]+)/);
+    <script>
+        const CLIENT_ID = 'ВАШ_CLIENT_ID'; // Замените на ваш ID
+        const SCOPE = 'disk.info disk.write offline';
         
-        const errorCode = errorMatch ? decodeURIComponent(errorMatch[1]) : 'unknown';
-        const errorDesc = descMatch ? decodeURIComponent(descMatch[1]) : '';
+        const authButton = document.getElementById('auth-button');
+        const authStatus = document.getElementById('auth-status');
         
-        log
+        authButton.addEventListener('click', () => {
+            const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&scope=${SCOPE}`;
+            window.location.href = authUrl;
+        });
+
+        // Функция проверки токена (примерная реализация)
+        function checkToken() {
+            // Здесь должна быть логика проверки токена
+            // Например, из localStorage или URL
+            const token = getTokenFromUrl();
+            if (token) {
+                authStatus.textContent = 'Диск подключён';
+                authStatus.style.color = 'green';
+                showFolderSection();
+            }
+        }
+
+        function getTokenFromUrl() {
+            // Простая реализация получения токена из URL
+            const urlParams = new URLSearchParams(window.location.hash.substring(1));
+            return urlParams.get('access_token');
+        }
+
+        function showFolderSection() {
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('folder-section').style.display = 'block';
+        }
+
+        // Инициализация при загрузке страницы
+        window.addEventListener('load', () => {
+            checkToken();
+        });
+    </script>
+</body>
+</html>

@@ -286,7 +286,6 @@
       const items = data._embedded?.items || [];
       const folders = items.filter(i => i.type === 'dir');
       folderBrowserDiv.innerHTML = '';
-      // Кнопка "Вверх"
       if (path !== '/') {
         const parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
         const upDiv = document.createElement('div');
@@ -305,17 +304,15 @@
         };
         folderBrowserDiv.appendChild(div);
       }
-      // Кнопка выбора текущей папки
       const selectBtn = document.createElement('button');
       selectBtn.textContent = `✅ Выбрать эту папку: ${path}`;
       selectBtn.className = 'new-folder-btn';
       selectBtn.onclick = () => {
         document.getElementById('folder-input').value = path;
         folderBrowserDiv.style.display = 'none';
-        validateAndCreateFolder(); // сразу проверим/создадим
+        validateAndCreateFolder();
       };
       folderBrowserDiv.appendChild(selectBtn);
-      // Кнопка создания новой папки
       const newBtn = document.createElement('button');
       newBtn.textContent = '+ Создать папку';
       newBtn.className = 'new-folder-btn';
@@ -440,6 +437,7 @@
     addLog(`✅ Файл сохранён: ${fullPath}`);
   }
 
+  // Обработка папки: рекурсивный обход содержимого
   async function processFolder(publicKey, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
     addLog(`📂 Обработка папки: ${targetPath}`);
@@ -449,26 +447,29 @@
     const limit = 1000;
     let hasMore = true;
     while (hasMore && isRunning) {
+      // Запрашиваем содержимое публичной папки
       const url = `${API}/resources/public?public_key=${publicKey}&limit=${limit}&offset=${offset}`;
       const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
       if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
       const data = await resp.json();
-      const items = data._embedded?.items || [];
+      const items = data._embedded?.items || data.items || []; // на случай разных форматов
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
           await saveFile(item.public_key, targetPath, item.name);
         } else if (item.type === 'dir') {
           await processFolder(item.public_key, `${targetPath}/${item.name}`);
+        } else {
+          addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
         }
       }
-      hasMore = !!data._embedded?.next;
+      hasMore = !!data._embedded?.next || !!data.next;
       offset += limit;
     }
   }
 
+  // Главная обработка публичной ссылки
   async function processPublicLink(publicKey, targetPath) {
-    // Получаем информацию о публичном ресурсе
     const metaResp = await fetch(`${API}/resources/public?public_key=${publicKey}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
     });
@@ -477,14 +478,19 @@
       return;
     }
     const meta = await metaResp.json();
-    addLog(`🔍 Тип ресурса: ${meta.type}, имя: ${meta.name || 'без имени'}`);
+    
+    // Определяем тип ресурса
     if (meta.type === 'file') {
       await saveFile(publicKey, targetPath, meta.name);
     } else if (meta.type === 'dir') {
       await processFolder(publicKey, targetPath);
+    } else if (meta.items || meta._embedded?.items) {
+      // Если ответ содержит список items — это папка (некоторые версии API)
+      addLog(`📂 Обнаружена папка (по наличию items) для ключа ${publicKey}`);
+      await processFolder(publicKey, targetPath);
     } else {
-      addLog(`⚠️ Неизвестный тип ресурса: ${meta.type} для ключа ${publicKey}`);
-      addLog(`   Ответ API: ${JSON.stringify(meta)}`);
+      addLog(`⚠️ Неизвестный тип ресурса для ключа ${publicKey}`);
+      addLog(`   Ответ API: ${JSON.stringify(meta).substring(0, 200)}...`);
     }
   }
 
@@ -496,7 +502,6 @@
     if (!keys.length) return alert('Не найдено ни одной публичной ссылки на Яндекс.Диск');
 
     if (!TARGET_FOLDER) {
-      // Если папка не выбрана, пробуем взять из поля ввода
       await validateAndCreateFolder();
       if (!TARGET_FOLDER) return alert('Сначала выберите папку назначения');
     }

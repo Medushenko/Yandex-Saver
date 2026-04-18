@@ -103,6 +103,15 @@
   let popupTimer = null;
   let processedPublicKeys = new Set();
 
+  // ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: ИЗВЛЕЧЬ КОРОТКИЙ КЛЮЧ ==========
+  function extractPublicKey(urlOrKey) {
+    // Если это уже короткий ключ (не URL), возвращаем как есть
+    if (!urlOrKey.startsWith('http')) return urlOrKey;
+    // Ищем паттерн /d/XXXXXXXX или /i/XXXXXXXX
+    const match = urlOrKey.match(/\/([di])\/([A-Za-z0-9_-]+)/);
+    return match ? match[2] : urlOrKey;
+  }
+
   // ========== POPUP АВТОРИЗАЦИЯ ==========
   function startOAuthPopup() {
     updateStatus('Открытие окна авторизации...');
@@ -394,8 +403,11 @@
     updateStatus(`Сохранение: ${fileName}`);
     addLog(`💾 ${fileName} → ${folderPath}`);
 
+    // Используем короткий ключ
+    const shortKey = extractPublicKey(filePublicKey);
+    
     // 1. Получаем ссылку на скачивание публичного файла (БЕЗ ТОКЕНА)
-    const infoRes = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(filePublicKey)}`, {
+    const infoRes = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(shortKey)}`, {
       signal: abortController?.signal
     });
     if (!infoRes.ok) {
@@ -441,17 +453,18 @@
   // ========== ОБРАБОТКА ПАПКИ ==========
   async function processFolder(folderPublicKey, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
-    if (processedPublicKeys.has(folderPublicKey)) {
+    const shortKey = extractPublicKey(folderPublicKey);
+    if (processedPublicKeys.has(shortKey)) {
       addLog(`⚠️ Папка уже обработана, пропускаем`);
       return;
     }
-    processedPublicKeys.add(folderPublicKey);
+    processedPublicKeys.add(shortKey);
     addLog(`📂 Обработка папки: ${targetPath}`);
     updateStatus(`Обработка: ${targetPath}`);
 
     await ensureFolder(targetPath);
 
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(folderPublicKey)}&limit=1000`;
+    let url = `${API}/public/resources?public_key=${encodeURIComponent(shortKey)}&limit=1000`;
     let hasMore = true;
 
     while (hasMore && isRunning) {
@@ -467,12 +480,12 @@
         if (!isRunning) throw new Error('Остановлено');
 
         if (item.type === 'file') {
-          // Правильный ключ: базовый_ключ_папки?path=путь_к_файлу
-          const filePublicKey = `${folderPublicKey}?path=${encodeURIComponent(item.path)}`;
+          // Ключ для файла: короткий_ключ_папки?path=путь_к_файлу
+          const filePublicKey = `${shortKey}?path=${encodeURIComponent(item.path)}`;
           await savePublicFile(filePublicKey, targetPath, item.name);
         } else if (item.type === 'dir') {
-          // Для подпапки используем её public_key (если есть), иначе формируем
-          const subFolderKey = item.public_key || `${folderPublicKey}?path=${encodeURIComponent(item.path)}`;
+          // Для подпапки используем её public_key (короткий) или формируем
+          const subFolderKey = item.public_key ? extractPublicKey(item.public_key) : `${shortKey}?path=${encodeURIComponent(item.path)}`;
           await processFolder(subFolderKey, `${targetPath}/${item.name}`);
         }
       }
@@ -485,26 +498,29 @@
 
   // ========== ОБРАБОТКА ПУБЛИЧНОЙ ССЫЛКИ ==========
   async function processPublicLink(publicUrl, baseTargetPath) {
+    const shortKey = extractPublicKey(publicUrl);
+    addLog(`🔑 Используем короткий ключ: ${shortKey}`);
+
     // Запрос метаинформации БЕЗ токена
-    const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, {
+    const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(shortKey)}`, {
       signal: abortController?.signal
     });
 
     if (!metaResp.ok) {
-      addLog(`⚠️ Ошибка получения информации (${metaResp.status}) для ${publicUrl}`);
+      addLog(`⚠️ Ошибка получения информации (${metaResp.status}) для ключа ${shortKey}`);
       return;
     }
     const meta = await metaResp.json();
 
     if (meta.type === 'file') {
-      await savePublicFile(publicUrl, baseTargetPath, meta.name);
+      await savePublicFile(shortKey, baseTargetPath, meta.name);
     } else if (meta.type === 'dir') {
       // Создаём папку с именем публичной папки
       const folderName = meta.name || 'Без имени';
       const newTargetPath = `${baseTargetPath}/${folderName}`;
       addLog(`📁 Создаём корневую папку: ${newTargetPath}`);
       await ensureFolder(newTargetPath);
-      await processFolder(publicUrl, newTargetPath);
+      await processFolder(shortKey, newTargetPath);
     } else {
       addLog(`⚠️ Неизвестный тип ресурса: ${meta.type}`);
     }

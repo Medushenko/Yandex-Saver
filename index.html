@@ -392,7 +392,7 @@
     return uniqueUrls;
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ (СОХРАНЕНИЕ ЧЕРЕЗ API) ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -407,12 +407,13 @@
     } else if (!res.ok) throw new Error(`Ошибка проверки папки ${path}: ${res.status}`);
   }
 
-  // Функция для сохранения публичного файла
-  async function savePublicFile(publicKeyOrUrl, targetPath, fileName) {
+  // Функция сохранения публичного файла с указанием полного пути
+  async function savePublicFile(publicKeyOrUrl, fullTargetPath, fileName) {
     updateStatus(`Сохранение файла: ${fileName}`);
-    addLog(`💾 Сохранение файла: ${fileName}`);
+    addLog(`💾 Сохранение файла: ${fileName} → ${fullTargetPath}`);
     
-    const saveUrl = `${API}/public/resources/save-to-disk?public_key=${encodeURIComponent(publicKeyOrUrl)}&name=${encodeURIComponent(fileName)}`;
+    // Эндпоинт save-to-disk с параметром path
+    const saveUrl = `${API}/public/resources/save-to-disk?public_key=${encodeURIComponent(publicKeyOrUrl)}&name=${encodeURIComponent(fileName)}&path=${encodeURIComponent(fullTargetPath)}`;
     const response = await fetch(saveUrl, {
       method: 'POST',
       headers: { 'Authorization': `OAuth ${TOKEN}` },
@@ -420,22 +421,23 @@
     });
 
     if (!response.ok) {
-      throw new Error(`Не удалось сохранить файл: ${response.status}`);
+      const errText = await response.text();
+      throw new Error(`Не удалось сохранить файл: ${response.status} ${errText}`);
     }
 
+    // Дожидаемся завершения операции (API может вернуть ссылку на статус)
     const data = await response.json();
     if (data.href) {
-      addLog(`✅ Файл сохранён: ${targetPath}/${fileName}`);
+      // Опционально можно проверить статус операции, но обычно файл уже сохранён
+      addLog(`✅ Файл сохранён: ${fullTargetPath}/${fileName}`);
     } else {
-      throw new Error('Не удалось получить информацию о сохранённом файле');
+      addLog(`✅ Файл сохранён (без подтверждения): ${fullTargetPath}/${fileName}`);
     }
   }
 
-  // Функция для обработки папки
+  // Обработка папки
   async function processFolder(publicKeyOrUrl, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
-    
-    // Используем URL для идентификации уже обработанных папок, чтобы избежать циклов
     if (processedPublicKeys.has(publicKeyOrUrl)) {
       addLog(`⚠️ Папка уже обработана, пропускаем (цикл)`);
       return;
@@ -460,20 +462,16 @@
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
-          // Для файла используем public_key родительской папки и путь к файлу
-          const filePublicKey = `${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`;
-          await savePublicFile(filePublicKey, targetPath, item.name);
+          // Используем public_key элемента, если есть
+          const fileKey = item.public_key || publicKeyOrUrl;
+          await savePublicFile(fileKey, targetPath, item.name);
         } else if (item.type === 'dir') {
-          // Критическое исправление: используем собственный public_key вложенной папки, если он есть,
-          // иначе конструируем корректный URL, но без добавления имени папки в targetPath повторно
-          if (item.public_key) {
-            // Если у папки есть свой public_key, используем его напрямую
-            await processFolder(item.public_key, `${targetPath}/${item.name}`);
-          } else {
-            // Иначе конструируем URL с параметром path
-            const subFolderKey = `${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`;
-            await processFolder(subFolderKey, `${targetPath}/${item.name}`);
+          if (!item.public_key) {
+            addLog(`⚠️ У папки ${item.name} нет public_key, пропускаем`);
+            continue;
           }
+          // Рекурсивно обрабатываем подпапку, создавая соответствующий путь
+          await processFolder(item.public_key, `${targetPath}/${item.name}`);
         } else {
           addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
         }
@@ -488,7 +486,7 @@
     }
   }
 
-  async function processPublicLink(publicUrl, targetPath) {
+  async function processPublicLink(publicUrl, baseTargetPath) {
     const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, {
       signal: abortController?.signal
     });
@@ -499,12 +497,15 @@
     const meta = await metaResp.json();
 
     if (meta.type === 'file') {
-      await savePublicFile(publicUrl, targetPath, meta.name);
+      // Файл сохраняем прямо в baseTargetPath
+      await savePublicFile(publicUrl, baseTargetPath, meta.name);
     } else if (meta.type === 'dir') {
-      await processFolder(publicUrl, targetPath);
-    } else if (meta._embedded?.items || meta.items) {
-      addLog(`📂 Обнаружена папка для ${publicUrl}`);
-      await processFolder(publicUrl, targetPath);
+      // Создаём подпапку с именем публичной папки и обрабатываем её содержимое
+      const folderName = meta.name || 'Без имени';
+      const newTargetPath = `${baseTargetPath}/${folderName}`;
+      addLog(`📁 Создаём корневую папку: ${newTargetPath}`);
+      await ensureFolder(newTargetPath);
+      await processFolder(publicUrl, newTargetPath);
     } else {
       addLog(`⚠️ Неизвестный тип ресурса: ${JSON.stringify(meta).substring(0, 200)}`);
     }

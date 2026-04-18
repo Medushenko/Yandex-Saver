@@ -25,8 +25,6 @@
     button.secondary{background:#666}
     button.secondary:hover{background:#555}
     .hint{font-size:.85rem;color:var(--text-light);margin-bottom:12px;line-height:1.4}
-    .error-box{background:#ffebee;color:#c62828;padding:12px;border-radius:8px;margin:12px 0;font-size:.9rem}
-    .success-box{background:#e8f5e9;color:#2e7d32;padding:12px;border-radius:8px;margin:12px 0;font-size:.9rem}
     .log{background:#111;color:#0f0;padding:12px;border-radius:8px;font-family:monospace;font-size:.85rem;height:200px;overflow-y:auto;margin-top:16px;white-space:pre-wrap}
     .progress-bar{width:100%;height:8px;background:#eee;border-radius:4px;margin:12px 0;overflow:hidden}
     .progress-fill{height:100%;background:var(--primary);width:0%;transition:width .3s}
@@ -86,24 +84,16 @@
     let abortController = null;
 
     window.addEventListener('DOMContentLoaded', async () => {
-      log('🔍 Проверка состояния...');
       const hash = window.location.hash;
-      log(`Hash: ${hash || '(пусто)'}`);
-      
       if (hash && hash.includes('access_token=')) {
         const match = hash.match(/access_token=([^&]+)/);
         if (match) {
           TOKEN = decodeURIComponent(match[1]);
           sessionStorage.setItem('ydisk_token', TOKEN);
           history.replaceState(null, '', window.location.pathname + window.location.search);
-          log('✅ Токен получен!');
           await onAuthSuccess();
-        } else {
-          log('❌ Токен не найден');
-          showMessage('error', '❌ Ошибка авторизации. Попробуйте ещё раз.');
         }
       } else if (TOKEN) {
-        log('📋 Проверка сохранённого токена...');
         try {
           const test = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
           if (test.ok) await onAuthSuccess();
@@ -113,23 +103,13 @@
     });
 
     async function onAuthSuccess() {
-      showMessage('success', '✅ Успешно подключено!');
       document.getElementById('user-block').style.display = 'flex';
-      setTimeout(() => goToStep('step-folder'), 1000);
+      setTimeout(() => goToStep('step-folder'), 500);
     }
 
     function goToStep(id) {
       document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
       document.getElementById(id).classList.add('active');
-    }
-
-    function showMessage(type, text) {
-      const div = document.createElement('div');
-      div.className = type === 'error' ? 'error-box' : 'success-box';
-      div.textContent = text;
-      const container = document.getElementById('auth-message');
-      container.innerHTML = '';
-      container.appendChild(div);
     }
 
     function log(msg) {
@@ -140,10 +120,9 @@
     }
 
     function startOAuth() {
-      // ДОБАВИЛИ login:info - это часто решает проблему invalid_scope
-      const scope = 'login:info disk:read disk:write';
+      // Убрали login:info - он не обязателен
+      const scope = 'disk:read disk:write';
       const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${encodeURIComponent(CLIENT_ID)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`;
-      log('🚀 Переход к авторизации...');
       window.location.href = url;
     }
 
@@ -158,7 +137,6 @@
     async function validateFolder() {
       const input = document.getElementById('folder-input').value.trim();
       TARGET_FOLDER = input.startsWith('/') ? input : '/' + input;
-      log(`📁 Проверка: ${TARGET_FOLDER}`);
       try {
         const res = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, {
           headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -239,7 +217,7 @@
       if (!upRes.ok) throw new Error('Ошибка загрузки');
       const uploadUrl = (await upRes.json()).href;
       
-      log(`☁️ Загрузка на Диск...`);
+      log(`☁️ Загрузка...`);
       const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, signal: abortController?.signal });
       if (!putRes.ok) throw new Error(`Загрузка: ${putRes.status}`);
       log(`✅ ${fileName} сохранён`);

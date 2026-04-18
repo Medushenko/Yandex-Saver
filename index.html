@@ -392,7 +392,7 @@
     return uniqueUrls;
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ (БЕЗ AUTHORIZATION ДЛЯ PUBLIC) ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ (СОХРАНЕНИЕ ЧЕРЕЗ API) ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -407,31 +407,31 @@
     } else if (!res.ok) throw new Error(`Ошибка проверки папки ${path}: ${res.status}`);
   }
 
-  async function saveFile(publicKeyOrUrl, targetPath, fileName) {
-    updateStatus(`Скачивание: ${fileName}`);
-    addLog(`📥 Скачивание файла: ${fileName}`);
-    const dlInfo = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKeyOrUrl)}`, {
-      signal: abortController?.signal
-    });
-    if (!dlInfo.ok) throw new Error(`Не удалось получить ссылку на скачивание: ${dlInfo.status}`);
-    const dlData = await dlInfo.json();
-    const fileResp = await fetch(dlData.href, { signal: abortController?.signal });
-    if (!fileResp.ok) throw new Error('Ошибка скачивания файла');
-    const blob = await fileResp.blob();
-    const fullPath = `${targetPath}/${fileName}`;
-    updateStatus(`Загрузка на Диск: ${fullPath}`);
-    const uploadReq = await fetch(`${API}/resources/upload?path=${encodeURIComponent(fullPath)}&overwrite=true&mkdir=true`, {
+  // Функция для сохранения публичного файла
+  async function savePublicFile(publicKeyOrUrl, targetPath, fileName) {
+    updateStatus(`Сохранение файла: ${fileName}`);
+    addLog(`💾 Сохранение файла: ${fileName}`);
+    
+    const saveUrl = `${API}/public/resources/save-to-disk?public_key=${encodeURIComponent(publicKeyOrUrl)}&name=${encodeURIComponent(fileName)}`;
+    const response = await fetch(saveUrl, {
       method: 'POST',
       headers: { 'Authorization': `OAuth ${TOKEN}` },
       signal: abortController?.signal
     });
-    if (!uploadReq.ok) throw new Error(`Не удалось получить URL загрузки: ${uploadReq.status}`);
-    const uploadUrl = (await uploadReq.json()).href;
-    const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, signal: abortController?.signal });
-    if (!putRes.ok) throw new Error(`Ошибка загрузки: ${putRes.status}`);
-    addLog(`✅ Файл сохранён: ${fullPath}`);
+
+    if (!response.ok) {
+      throw new Error(`Не удалось сохранить файл: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.href) {
+      addLog(`✅ Файл сохранён: ${targetPath}/${fileName}`);
+    } else {
+      throw new Error('Не удалось получить информацию о сохранённом файле');
+    }
   }
 
+  // Функция для обработки папки
   async function processFolder(publicKeyOrUrl, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
     if (processedPublicKeys.has(publicKeyOrUrl)) {
@@ -458,18 +458,11 @@
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
-          if (!item.public_key && !item.file) {
-            addLog(`⚠️ У файла ${item.name} нет public_key, пропускаем.`);
-            continue;
-          }
-          const filePublicKey = item.public_key || publicKeyOrUrl + '?path=' + encodeURIComponent(item.path);
-          await saveFile(filePublicKey, targetPath, item.name);
+          // Используем публичный ключ папки и путь к файлу
+          const filePublicKey = `${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`;
+          await savePublicFile(filePublicKey, targetPath, item.name);
         } else if (item.type === 'dir') {
-          if (item.public_key === publicKeyOrUrl) {
-            addLog(`⚠️ Обнаружена циклическая ссылка на папку ${item.name}, пропускаем`);
-            continue;
-          }
-          await processFolder(item.public_key || publicKeyOrUrl + '/' + item.name, `${targetPath}/${item.name}`);
+          await processFolder(`${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`, `${targetPath}/${item.name}`);
         } else {
           addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
         }
@@ -485,7 +478,6 @@
   }
 
   async function processPublicLink(publicUrl, targetPath) {
-    // Запрос метаинформации о публичном ресурсе
     const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, {
       signal: abortController?.signal
     });
@@ -496,7 +488,7 @@
     const meta = await metaResp.json();
 
     if (meta.type === 'file') {
-      await saveFile(publicUrl, targetPath, meta.name);
+      await savePublicFile(publicUrl, targetPath, meta.name);
     } else if (meta.type === 'dir') {
       await processFolder(publicUrl, targetPath);
     } else if (meta._embedded?.items || meta.items) {

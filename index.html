@@ -1,20 +1,260 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs>
-    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#ff6b4a;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#fc3f1d;stop-opacity:1" />
-    </linearGradient>
-  </defs>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yandex Saver - Сохранение на Яндекс.Диск</title>
   
-  <path d="M50 20 C32 20, 22 30, 22 40 C22 48, 28 53, 34 54 C34.5 54, 35 54, 35.5 54 L64.5 54 C65 54, 65.5 54, 66 54 C72 53, 78 48, 78 40 C78 30, 68 20, 50 20 Z" 
-        fill="white" 
-        stroke="#e0e0e0" 
-        stroke-width="2"/>
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="favicon.svg">
   
-  <path d="M50 35 L50 68 M42 58 L50 68 L58 58" 
-        stroke="url(#arrowGrad)" 
-        stroke-width="7" 
-        stroke-linecap="round" 
-        stroke-linejoin="round" 
-        fill="none"/>
-</svg>
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#fc3f1d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Yandex Saver">
+  
+  <style>
+    :root{--bg:#f5f7fa;--card:#fff;--primary:#fc3f1d;--primary-hover:#e6300f;--text:#333;--text-light:#666;--border:#e0e0e0;--success:#4caf50;--error:#f44336;--warning:#ff9800}
+    *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    body{background:var(--bg);color:var(--text);padding:20px;min-height:100vh;display:flex;justify-content:center;align-items:flex-start}
+    .container{max-width:600px;width:100%;background:var(--card);padding:24px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+    .header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+    .header-icon{width:48px;height:48px}
+    h1{font-size:1.5rem}
+    .step{display:none;margin-top:20px;animation:fadeIn .3s ease}
+    .step.active{display:block}
+    label{display:block;margin-bottom:6px;font-weight:500;font-size:.95rem}
+    input,textarea,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:1rem;margin-bottom:12px;transition:border .2s}
+    input:focus,textarea:focus{outline:none;border-color:var(--primary)}
+    button{background:var(--primary);color:#fff;border:none;padding:12px 20px;border-radius:8px;font-size:1rem;cursor:pointer;width:100%;transition:background .2s}
+    button:hover{background:var(--primary-hover)}
+    button:disabled{background:#ccc;cursor:not-allowed}
+    button.secondary{background:#666}
+    button.secondary:hover{background:#555}
+    .hint{font-size:.85rem;color:var(--text-light);margin-bottom:12px;line-height:1.4}
+    .log{background:#111;color:#0f0;padding:12px;border-radius:8px;font-family:monospace;font-size:.85rem;height:150px;overflow-y:auto;margin-top:16px;white-space:pre-wrap}
+    .progress-bar{width:100%;height:8px;background:#eee;border-radius:4px;margin:12px 0;overflow:hidden}
+    .progress-fill{height:100%;background:var(--primary);width:0%;transition:width .3s}
+    .tag{display:inline-block;padding:4px 8px;background:#eef;border-radius:4px;font-size:.8rem;margin-right:6px}
+    .user-info{display:flex;align-items:center;justify-content:space-between;padding:10px;background:#f9f9f9;border-radius:8px;margin-bottom:16px}
+    .user-info span{font-size:.9rem}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+    @media(max-width:480px){.container{padding:16px}h1{font-size:1.3rem}.header-icon{width:40px;height:40px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="favicon.svg" alt="Yandex Saver" class="header-icon">
+      <h1>Yandex Saver</h1>
+    </div>
+    <div class="hint">Сохранение файлов с публичных ссылок на <strong>ваш</strong> Яндекс.Диск</div>
+
+    <div id="user-block" class="user-info" style="display:none;">
+      <span>✅ Яндекс.Диск подключён</span>
+      <button onclick="logout()" style="width:auto;padding:6px 12px;font-size:.85rem;background:var(--error)">Выйти</button>
+    </div>
+
+    <div id="step-auth" class="step active">
+      <label>1. Подключите Яндекс.Диск</label>
+      <div class="hint">Нажмите кнопку → войдите в <strong>свой</strong> аккаунт Яндекса → разрешите доступ.</div>
+      <button id="btn-auth" onclick="startOAuth()">🔑 Подключить Яндекс.Диск</button>
+      <div id="auth-status" class="hint" style="margin-top:8px;"></div>
+    </div>
+
+    <div id="step-folder" class="step">
+      <label>2. Папка назначения</label>
+      <div class="hint">Введите путь на <strong>вашем</strong> Диске. Если папки нет, она создастся автоматически.</div>
+      <input type="text" id="folder-input" value="/saved-materials" placeholder="/например: /work/2024">
+      <button onclick="validateFolder()">📁 Проверить путь</button>
+      <div id="folder-status" class="hint" style="margin-top:8px;"></div>
+      <button id="btn-next-links" style="margin-top:16px;display:none;" onclick="goToStep('step-links')">Далее →</button>
+    </div>
+
+    <div id="step-links" class="step">
+      <label>3. Вставьте ссылки</label>
+      <div class="hint">Каждая ссылка с новой строки. Поддерживаются <span class="tag">yadi.sk/i/...</span> <span class="tag">disk.yandex.ru/i/...</span></div>
+      <textarea id="links-input" rows="6" placeholder="https://disk.yandex.ru/i/ABC123&#10;https://yadi.sk/i/XYZ789"></textarea>
+      <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
+      <button id="btn-stop" class="secondary" style="margin-top:8px;display:none;" onclick="stopProcess()">⏹ Остановить</button>
+      <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+      <div id="progress-text" style="text-align:center;font-size:.9rem;margin-bottom:8px;"></div>
+    </div>
+
+    <div id="log" class="log" style="display:none;"></div>
+  </div>
+
+  <script>
+    const CLIENT_ID = '89ec41a83e4e47328b3fa1e7b818c402';
+    const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
+    const API = 'https://cloud-api.yandex.net/v1/disk';
+    let TOKEN = sessionStorage.getItem('ydisk_token') || '';
+    let TARGET_FOLDER = '';
+    let isRunning = false;
+    let abortController = null;
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token=')) {
+        const match = hash.match(/access_token=([^&]+)/);
+        if (match) {
+          TOKEN = decodeURIComponent(match[1]);
+          sessionStorage.setItem('ydisk_token', TOKEN);
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+          await onAuthSuccess();
+        }
+      } else if (TOKEN) {
+        try {
+          const test = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
+          if (test.ok) await onAuthSuccess();
+          else throw new Error('Токен недействителен');
+        } catch {
+          logout();
+        }
+      }
+    });
+
+    async function onAuthSuccess() {
+      document.getElementById('auth-status').textContent = '✅ Успешно подключено!';
+      document.getElementById('auth-status').style.color = 'var(--success)';
+      document.getElementById('auth-status').style.display = 'block';
+      document.getElementById('user-block').style.display = 'flex';
+      document.getElementById('step-auth').classList.remove('active');
+      document.getElementById('step-folder').classList.add('active');
+    }
+
+    function goToStep(id) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function log(msg, type = 'info') {
+      const el = document.getElementById('log');
+      el.style.display = 'block';
+      const timestamp = new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+      el.textContent += `[${timestamp}] ${prefix} ${msg}\n`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function startOAuth() {
+      const scope = 'disk:read disk:write';
+      const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${encodeURIComponent(CLIENT_ID)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`;
+      window.location.href = url;
+    }
+
+    function logout() {
+      TOKEN = '';
+      sessionStorage.removeItem('ydisk_token');
+      document.getElementById('user-block').style.display = 'none';
+      document.getElementById('auth-status').textContent = '';
+      document.getElementById('log').textContent = '';
+      document.getElementById('log').style.display = 'none';
+      goToStep('step-auth');
+    }
+
+    async function validateFolder() {
+      const input = document.getElementById('folder-input').value.trim();
+      TARGET_FOLDER = input.startsWith('/') ? input : '/' + input;
+      log(`📁 Проверка пути: ${TARGET_FOLDER}`);
+      try {
+        const res = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, {
+          headers: { 'Authorization': `OAuth ${TOKEN}` }
+        });
+        if (res.status === 404) {
+          log('⚠️ Папка не найдена. Будет создана при первой загрузке.');
+        } else if (res.ok) {
+          const d = await res.json();
+          if (d.type !== 'dir') throw new Error('Указанный путь существует, но это не папка.');
+          log('✅ Папка существует.');
+        } else throw new Error(`Ошибка API: ${res.status}`);
+        document.getElementById('folder-status').textContent = `✅ Готово: ${TARGET_FOLDER}`;
+        document.getElementById('folder-status').style.color = 'var(--success)';
+        document.getElementById('btn-next-links').style.display = 'block';
+      } catch (e) {
+        document.getElementById('folder-status').textContent = '❌ ' + e.message;
+        document.getElementById('folder-status').style.color = 'var(--error)';
+        log(`Ошибка проверки папки: ${e.message}`, 'error');
+      }
+    }
+
+    function parsePublicUrl(url) {
+      const match = url.trim().match(/(?:yadi\.sk|disk\.yandex\.ru)\/i\/([A-Za-z0-9_-]+)/);
+      return match ? match[1] : null;
+    }
+
+    async function startProcess() {
+      const raw = document.getElementById('links-input').value.trim();
+      if (!raw) return alert('Вставьте хотя бы одну ссылку.');
+      const urls = raw.split(/\n/).map(u => u.trim()).filter(Boolean);
+      const keys = urls.map(parsePublicUrl).filter(Boolean);
+      if (keys.length === 0) return alert('Не удалось распознать ссылки.');
+
+      isRunning = true;
+      abortController = new AbortController();
+      document.getElementById('btn-start').disabled = true;
+      document.getElementById('btn-stop').style.display = 'block';
+      document.getElementById('log').style.display = 'block';
+      document.getElementById('log').textContent = '';
+      log(`🚀 Найдено файлов: ${keys.length}`);
+
+      let success = 0;
+      for (let i = 0; i < keys.length; i++) {
+        if (!isRunning) { log('⏹ Остановлено пользователем'); break; }
+        document.getElementById('progress-text').textContent = `${i + 1}/${keys.length}`;
+        document.getElementById('progress-fill').style.width = `${(i / keys.length) * 100}%`;
+        try {
+          await saveItem(keys[i], i + 1, keys.length);
+          success++;
+        } catch (e) {
+          log(`💥 Ошибка #${i + 1}: ${e.message}`, 'error');
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+      document.getElementById('progress-fill').style.width = '100%';
+      document.getElementById('progress-text').textContent = `✅ Готово! Сохранено: ${success}/${keys.length}`;
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-stop').style.display = 'none';
+      isRunning = false;
+      abortController = null;
+    }
+
+    function stopProcess() {
+      isRunning = false;
+      if (abortController) abortController.abort();
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-stop').style.display = 'none';
+      log('⏹ Остановка...');
+    }
+
+    async function saveItem(publicKey, current, total) {
+      const headers = { 'Authorization': `OAuth ${TOKEN}` };
+      log(`📥 [${current}/${total}] Загрузка информации...`);
+      const infoRes = await fetch(`${API}/resources/public/download?public_key=${publicKey}`, { headers, signal: abortController?.signal });
+      if (!infoRes.ok) throw new Error(`API вернул ${infoRes.status}`);
+      const info = await infoRes.json();
+      if (info.type === 'dir') throw new Error('Ссылка ведёт на папку. Поддерживаются только прямые файлы.');
+
+      const fileName = info.name || `file_${publicKey}`;
+      log(`💾 Скачивание: ${fileName}`);
+      const dlRes = await fetch(info.href, { signal: abortController?.signal });
+      if (!dlRes.ok) throw new Error('Не удалось скачать файл');
+      const blob = await dlRes.blob();
+
+      const path = `${TARGET_FOLDER}/${fileName}`;
+      const upRes = await fetch(`${API}/resources/upload?path=${encodeURIComponent(path)}&overwrite=true`, { 
+        method: 'POST', headers, signal: abortController?.signal 
+      });
+      if (!upRes.ok) throw new Error('Не получен URL для загрузки');
+      const uploadUrl = (await upRes.json()).href;
+
+      log(`☁️ Загрузка на Диск...`);
+      const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, signal: abortController?.signal });
+      if (!putRes.ok) throw new Error(`Ошибка загрузки: ${putRes.status}`);
+      log(`✅ ${fileName} сохранён!`, 'success');
+    }
+  </script>
+</body>
+</html>

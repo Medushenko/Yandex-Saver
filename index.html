@@ -1,41 +1,44 @@
-async function processFolder(folderPublicKey, targetPath) {
+// ✅ ОБРАБОТКА ПАПОК — исправленная версия
+async function processFolder(rootPublicKey, targetPath, relativePath = '') {
   if (!isRunning) throw new Error('Остановлено');
-  if (processedPublicKeys.has(folderPublicKey)) {
-    addLog(`⚠️ Папка уже обработана, пропускаем`);
-    return;
-  }
-  processedPublicKeys.add(folderPublicKey);
-  addLog(`📂 Обработка папки: ${targetPath}`);
+  
+  const folderKey = extractPublicKey(rootPublicKey);
+  const fullRelativePath = relativePath ? `${relativePath}/` : '';
+  
+  addLog(`📂 Обработка: ${targetPath} (ключ: ${folderKey})`);
   updateStatus(`Обработка: ${targetPath}`);
-
+  
   await ensureFolder(targetPath);
 
-  // Базовый URL для запроса содержимого папки
-  let url = `${API}/public/resources?public_key=${encodeURIComponent(folderPublicKey)}&limit=1000`;
+  let url = `${API}/public/resources?public_key=${encodeURIComponent(folderKey)}&limit=1000`;
+  if (relativePath) url += `&path=${encodeURIComponent(relativePath)}`;
+  
   let hasMore = true;
-
   while (hasMore && isRunning) {
     const resp = await fetch(url, { signal: abortController?.signal });
-    if (!resp.ok) throw new Error(`Не получено содержимое папки (${resp.status})`);
+    if (!resp.ok) throw new Error(`Не получено содержимое (${resp.status})`);
     const data = await resp.json();
     const items = data._embedded?.items || [];
-
-    addLog(`📊 Найдено: ${items.filter(i => i.type === 'file').length} файлов, ${items.filter(i => i.type === 'dir').length} папок`);
-
+    
+    addLog(`📊 Найдено: ${items.filter(i=>i.type==='file').length} файлов, ${items.filter(i=>i.type==='dir').length} папок`);
+    
     for (const item of items) {
       if (!isRunning) throw new Error('Остановлено');
-
+      
       if (item.type === 'file') {
-        // ✅ Правильный ключ для файла: базовый_ключ_папки?path=путь_к_файлу
-        const filePublicKey = `${folderPublicKey}?path=${encodeURIComponent(item.path)}`;
-        await savePublicFile(filePublicKey, targetPath, item.name);
-      } else if (item.type === 'dir') {
-        // Для подпапки используем её собственный public_key (если есть)
-        const subFolderKey = item.public_key || `${folderPublicKey}?path=${encodeURIComponent(item.path)}`;
-        await processFolder(subFolderKey, `${targetPath}/${item.name}`);
+        // ✅ Используем rootPublicKey + относительный путь файла
+        const fileRelativePath = `${fullRelativePath}${item.name}`;
+        await savePublicFile(rootPublicKey, targetPath, item.name, fileRelativePath);
+      } 
+      else if (item.type === 'dir') {
+        // ✅ Рекурсивно обрабатываем подпапку
+        const newRelativePath = `${fullRelativePath}${item.name}`;
+        const newTargetPath = `${targetPath}/${item.name}`;
+        await ensureFolder(newTargetPath);
+        await processFolder(rootPublicKey, newTargetPath, newRelativePath);
       }
     }
-
+    
     hasMore = !!(data._embedded?.next || data.next);
     url = data._embedded?.next || data.next || '';
     if (hasMore && !url) break;

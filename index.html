@@ -5,223 +5,378 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yandex Saver - Сохранение на Яндекс.Диск</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <meta name="theme-color" content="#fc3f1d">
   <style>
     :root{--bg:#f5f7fa;--card:#fff;--primary:#fc3f1d;--primary-hover:#e6300f;--text:#333;--text-light:#666;--border:#e0e0e0;--success:#4caf50;--error:#f44336}
     *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
     body{background:var(--bg);color:var(--text);padding:20px;min-height:100vh;display:flex;justify-content:center;align-items:flex-start}
-    .container{max-width:600px;width:100%;background:var(--card);padding:24px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+    .container{max-width:700px;width:100%;background:var(--card);padding:24px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.08)}
     .header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-    .header-icon{width:48px;height:48px}
     h1{font-size:1.5rem}
     .step{display:none;margin-top:20px;animation:fadeIn .3s ease}
     .step.active{display:block}
-    label{display:block;margin-bottom:6px;font-weight:500;font-size:.95rem}
-    input,textarea{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:1rem;margin-bottom:12px}
-    input:focus,textarea:focus{outline:none;border-color:var(--primary)}
-    button{background:var(--primary);color:#fff;border:none;padding:12px 20px;border-radius:8px;font-size:1rem;cursor:pointer;width:100%;transition:background .2s;margin-bottom:8px}
+    label{display:block;margin-bottom:6px;font-weight:500}
+    input,textarea{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px}
+    button{background:var(--primary);color:#fff;border:none;padding:12px;border-radius:8px;cursor:pointer;width:100%;margin-bottom:8px}
     button:hover{background:var(--primary-hover)}
-    button:disabled{background:#ccc;cursor:not-allowed}
     button.secondary{background:#666}
-    button.secondary:hover{background:#555}
-    .hint{font-size:.85rem;color:var(--text-light);margin-bottom:12px;line-height:1.4}
-    .log{background:#111;color:#0f0;padding:12px;border-radius:8px;font-family:monospace;font-size:.85rem;height:200px;overflow-y:auto;margin-top:16px;white-space:pre-wrap}
+    .hint{font-size:.85rem;color:var(--text-light);margin-bottom:12px}
+    .error-box{background:#ffebee;color:#c62828;padding:12px;border-radius:8px;margin:12px 0}
+    .success-box{background:#e8f5e9;color:#2e7d32;padding:12px;border-radius:8px;margin:12px 0}
+    .log{background:#111;color:#0f0;padding:12px;border-radius:8px;font-family:monospace;font-size:.85rem;height:250px;overflow-y:auto;margin-top:16px}
     .progress-bar{width:100%;height:8px;background:#eee;border-radius:4px;margin:12px 0;overflow:hidden}
-    .progress-fill{height:100%;background:var(--primary);width:0%;transition:width .3s}
-    .user-info{display:flex;align-items:center;justify-content:space-between;padding:10px;background:#f9f9f9;border-radius:8px;margin-bottom:16px}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+    .progress-fill{height:100%;background:var(--primary);width:0%}
+    .user-info{display:flex;justify-content:space-between;padding:10px;background:#f9f9f9;border-radius:8px;margin-bottom:16px}
+    .status-panel{background:#f0f2f5;padding:12px;border-radius:8px;margin-bottom:16px}
+    .status-panel span{font-weight:bold;color:var(--primary)}
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <img src="favicon.svg" alt="Yandex Saver" class="header-icon">
-      <h1>Yandex Saver</h1>
-    </div>
-    <div class="hint">Сохранение файлов с публичных ссылок на <strong>ваш</strong> Яндекс.Диск</div>
+<div class="container">
+  <div class="header"><h1>Yandex Saver</h1></div>
+  <div class="hint">Сохранение файлов и папок с публичных ссылок на ваш Яндекс.Диск</div>
 
-    <div id="user-block" class="user-info" style="display:none;">
-      <span>✅ Яндекс.Диск подключён</span>
-      <button onclick="logout()" style="width:auto;padding:6px 12px;font-size:.85rem;background:var(--error)">Выйти</button>
-    </div>
-
-    <div id="step-auth" class="step active">
-      <label>1. Подключите Яндекс.Диск</label>
-      <div class="hint">Нажмите кнопку → войдите в аккаунт → нажмите <strong>"Разрешить"</strong>.</div>
-      <button id="btn-auth" onclick="startOAuth()">🔑 Подключить Яндекс.Диск</button>
-      <div id="auth-message"></div>
-    </div>
-
-    <div id="step-folder" class="step">
-      <label>2. Папка назначения</label>
-      <div class="hint">Введите путь на вашем Диске</div>
-      <input type="text" id="folder-input" value="/saved-materials" placeholder="/например: /work/2024">
-      <button onclick="validateFolder()">📁 Проверить путь</button>
-      <div id="folder-status" class="hint" style="margin-top:8px;"></div>
-      <button id="btn-next-links" style="margin-top:16px;display:none;" onclick="goToStep('step-links')">Далее →</button>
-    </div>
-
-    <div id="step-links" class="step">
-      <label>3. Вставьте ссылки</label>
-      <div class="hint">Каждая ссылка с новой строки</div>
-      <textarea id="links-input" rows="6" placeholder="https://disk.yandex.ru/i/ABC123&#10;https://yadi.sk/i/XYZ789"></textarea>
-      <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
-      <button id="btn-stop" class="secondary" style="display:none;" onclick="stopProcess()">⏹ Остановить</button>
-      <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
-      <div id="progress-text" style="text-align:center;font-size:.9rem;margin-bottom:8px;"></div>
-    </div>
-
-    <div id="log" class="log" style="display:none;"></div>
+  <div id="user-block" class="user-info" style="display:none;">
+    <span>✅ Диск подключён</span>
+    <button onclick="logout()" style="width:auto;padding:6px 12px;background:var(--error)">Выйти</button>
   </div>
 
-  <script>
-    const CLIENT_ID = '89ec41a83e4e47328b3fa1e7b818c402';
-    const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
-    const API = 'https://cloud-api.yandex.net/v1/disk';
-    let TOKEN = sessionStorage.getItem('ydisk_token') || '';
-    let TARGET_FOLDER = '';
-    let isRunning = false;
-    let abortController = null;
+  <div id="step-auth" class="step active">
+    <label>1. Подключите Яндекс.Диск</label>
+    <button onclick="startPKCE()">🔑 Авторизоваться (PKCE)</button>
+    <div id="auth-message"></div>
+  </div>
 
-    window.addEventListener('DOMContentLoaded', async () => {
-      const hash = window.location.hash;
-      if (hash && hash.includes('access_token=')) {
-        const match = hash.match(/access_token=([^&]+)/);
-        if (match) {
-          TOKEN = decodeURIComponent(match[1]);
-          sessionStorage.setItem('ydisk_token', TOKEN);
-          history.replaceState(null, '', window.location.pathname + window.location.search);
-          await onAuthSuccess();
-        }
-      } else if (TOKEN) {
+  <div id="step-folder" class="step">
+    <label>2. Папка назначения</label>
+    <input type="text" id="folder-input" value="/saved-materials">
+    <button onclick="validateAndCreateFolder()">📁 Проверить и создать</button>
+    <div id="folder-status" class="hint"></div>
+    <button id="btn-next-links" style="display:none;" onclick="goToStep('step-links')">Далее →</button>
+  </div>
+
+  <div id="step-links" class="step">
+    <label>3. Вставьте ссылки</label>
+    <textarea id="links-input" rows="6" placeholder="https://disk.yandex.ru/i/..."></textarea>
+    <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
+    <button id="btn-stop" class="secondary" style="display:none;" onclick="stopProcess()">⏹ Остановить</button>
+    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    <div id="progress-text" style="text-align:center;margin-bottom:8px;"></div>
+  </div>
+
+  <div class="status-panel">📋 Статус: <span id="current-status">Ожидание</span></div>
+  <div id="log" class="log"></div>
+</div>
+
+<script>
+  const CLIENT_ID = '89ec41a83e4e47328b3fa1e7b818c402';
+  const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
+  const API = 'https://cloud-api.yandex.net/v1/disk';
+  let TOKEN = sessionStorage.getItem('ydisk_token') || '';
+  let TARGET_FOLDER = '';
+  let isRunning = false;
+  let abortController = null;
+  let pkceVerifier = null;
+
+  // Генерация случайной строки для PKCE
+  function generateRandomString(length) {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    let text = '';
+    for (let i = 0; i < length; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+  }
+
+  // Создание code_challenge по verifier (SHA256 + base64url)
+  async function generateCodeChallenge(verifier) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  }
+
+  async function startPKCE() {
+    updateStatus('Генерация PKCE...');
+    pkceVerifier = generateRandomString(64);
+    const codeChallenge = await generateCodeChallenge(pkceVerifier);
+    sessionStorage.setItem('pkce_verifier', pkceVerifier);
+
+    const scope = 'disk:read disk:write';
+    const authUrl = `https://oauth.yandex.ru/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+    
+    updateStatus('Открытие окна авторизации...');
+    const width = 600, height = 700;
+    const left = (screen.width - width) / 2;
+    const top = (screen.height - height) / 2;
+    const popup = window.open(authUrl, 'YandexAuth', `width=${width},height=${height},left=${left},top=${top}`);
+    
+    window.addEventListener('message', async (event) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data.type === 'yandex_code') {
+        const code = event.data.code;
+        log('Получен код авторизации, обмениваю на токен...');
+        updateStatus('Обмен кода на токен...');
         try {
-          const test = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-          if (test.ok) await onAuthSuccess();
-          else logout();
-        } catch { logout(); }
+          const token = await exchangeCodeForToken(code, pkceVerifier);
+          if (token) {
+            TOKEN = token;
+            sessionStorage.setItem('ydisk_token', TOKEN);
+            log('✅ Токен получен');
+            onAuthSuccess();
+          } else {
+            throw new Error('Не удалось получить токен');
+          }
+        } catch (e) {
+          log(`❌ Ошибка обмена: ${e.message}`);
+          updateStatus('Ошибка авторизации');
+        }
+        if (popup && !popup.closed) popup.close();
       }
     });
+  }
 
-    async function onAuthSuccess() {
-      document.getElementById('user-block').style.display = 'flex';
-      setTimeout(() => goToStep('step-folder'), 500);
+  async function exchangeCodeForToken(code, verifier) {
+    const params = new URLSearchParams();
+    params.append('grant_type', 'authorization_code');
+    params.append('code', code);
+    params.append('client_id', CLIENT_ID);
+    params.append('code_verifier', verifier);
+    params.append('redirect_uri', REDIRECT_URI);
+
+    const response = await fetch('https://oauth.yandex.ru/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Token exchange failed: ${err}`);
     }
+    const data = await response.json();
+    return data.access_token;
+  }
 
-    function goToStep(id) {
-      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
+  // Обработка кода из URL (если страница загружена в popup)
+  if (window.opener && window.location.search.includes('code=')) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code) {
+      window.opener.postMessage({ type: 'yandex_code', code: code }, window.location.origin);
+      window.close();
     }
+  }
 
-    function log(msg) {
-      const el = document.getElementById('log');
-      el.style.display = 'block';
-      el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-      el.scrollTop = el.scrollHeight;
-    }
-
-    function startOAuth() {
-      // Убрали login:info - он не обязателен
-      const scope = 'disk:read disk:write';
-      const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${encodeURIComponent(CLIENT_ID)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`;
-      window.location.href = url;
-    }
-
-    function logout() {
-      TOKEN = '';
-      sessionStorage.removeItem('ydisk_token');
-      document.getElementById('user-block').style.display = 'none';
-      document.getElementById('log').textContent = '';
-      goToStep('step-auth');
-    }
-
-    async function validateFolder() {
-      const input = document.getElementById('folder-input').value.trim();
-      TARGET_FOLDER = input.startsWith('/') ? input : '/' + input;
+  // Загрузка страницы: проверяем токен
+  window.addEventListener('DOMContentLoaded', async () => {
+    if (TOKEN) {
+      log('Проверка токена...');
       try {
-        const res = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, {
+        const test = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
+        if (test.ok) {
+          log('Токен действителен');
+          await onAuthSuccess();
+        } else {
+          logout();
+        }
+      } catch (e) { logout(); }
+    } else {
+      log('Требуется авторизация');
+    }
+  });
+
+  function updateStatus(msg) {
+    document.getElementById('current-status').innerText = msg;
+  }
+
+  function log(msg) {
+    const el = document.getElementById('log');
+    el.style.display = 'block';
+    const time = new Date().toLocaleTimeString('ru-RU');
+    el.textContent += `[${time}] ${msg}\n`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  async function onAuthSuccess() {
+    showMessage('success', '✅ Яндекс.Диск подключён');
+    document.getElementById('user-block').style.display = 'flex';
+    updateStatus('Авторизация успешна');
+    goToStep('step-folder');
+  }
+
+  function goToStep(id) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function showMessage(type, text) {
+    const div = document.createElement('div');
+    div.className = type === 'error' ? 'error-box' : 'success-box';
+    div.textContent = text;
+    document.getElementById('auth-message').innerHTML = '';
+    document.getElementById('auth-message').appendChild(div);
+    setTimeout(() => div.remove(), 5000);
+  }
+
+  function logout() {
+    TOKEN = '';
+    sessionStorage.removeItem('ydisk_token');
+    sessionStorage.removeItem('pkce_verifier');
+    document.getElementById('user-block').style.display = 'none';
+    document.getElementById('log').innerHTML = '';
+    updateStatus('Вы вышли');
+    goToStep('step-auth');
+    log('🔓 Выход выполнен');
+  }
+
+  async function validateAndCreateFolder() {
+    let input = document.getElementById('folder-input').value.trim();
+    TARGET_FOLDER = input.startsWith('/') ? input : '/' + input;
+    log(`📁 Проверка папки: ${TARGET_FOLDER}`);
+    updateStatus(`Проверка папки...`);
+    try {
+      const res = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, {
+        headers: { 'Authorization': `OAuth ${TOKEN}` }
+      });
+      if (res.status === 404) {
+        log('Папка не найдена, создаю...');
+        const createRes = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, {
+          method: 'PUT',
           headers: { 'Authorization': `OAuth ${TOKEN}` }
         });
-        if (res.status === 404) log('⚠️ Папка будет создана');
-        else if (res.ok) {
-          const d = await res.json();
-          if (d.type !== 'dir') throw new Error('Это не папка');
-          log('✅ Папка существует');
-        }
-        document.getElementById('folder-status').textContent = `✅ Готово: ${TARGET_FOLDER}`;
-        document.getElementById('folder-status').style.color = 'var(--success)';
-        document.getElementById('btn-next-links').style.display = 'block';
+        if (!createRes.ok) throw new Error('Не удалось создать');
+        log('✅ Папка создана');
+      } else if (!res.ok) throw new Error(`Ошибка ${res.status}`);
+      else log('✅ Папка существует');
+      document.getElementById('folder-status').innerHTML = `✅ Готово: ${TARGET_FOLDER}`;
+      document.getElementById('btn-next-links').style.display = 'block';
+      updateStatus(`Папка готова: ${TARGET_FOLDER}`);
+    } catch (e) {
+      document.getElementById('folder-status').innerHTML = `❌ ${e.message}`;
+      log(`❌ Ошибка: ${e.message}`);
+      updateStatus(`Ошибка: ${e.message}`);
+    }
+  }
+
+  function extractPublicKey(url) {
+    const match = url.match(/(?:yadi\.sk|disk\.yandex\.ru)\/(?:i|d)\/([A-Za-z0-9_-]+)/);
+    return match ? match[1] : null;
+  }
+
+  async function ensureFolder(path) {
+    const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
+      headers: { 'Authorization': `OAuth ${TOKEN}` }
+    });
+    if (res.status === 404) {
+      const create = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `OAuth ${TOKEN}` }
+      });
+      if (!create.ok) throw new Error(`Не удалось создать ${path}`);
+      log(`📁 Создана папка: ${path}`);
+    } else if (!res.ok) throw new Error(`Ошибка проверки ${path}`);
+  }
+
+  async function saveFile(publicKey, targetPath, fileName) {
+    const headers = { 'Authorization': `OAuth ${TOKEN}` };
+    updateStatus(`Скачивание: ${fileName}`);
+    const dlInfo = await fetch(`${API}/resources/public/download?public_key=${publicKey}`, { headers, signal: abortController?.signal });
+    if (!dlInfo.ok) throw new Error(`Не удалось получить ссылку: ${dlInfo.status}`);
+    const dlData = await dlInfo.json();
+    const fileResp = await fetch(dlData.href, { signal: abortController?.signal });
+    if (!fileResp.ok) throw new Error('Ошибка скачивания');
+    const blob = await fileResp.blob();
+    const fullPath = `${targetPath}/${fileName}`;
+    updateStatus(`Загрузка: ${fullPath}`);
+    const uploadReq = await fetch(`${API}/resources/upload?path=${encodeURIComponent(fullPath)}&overwrite=true&mkdir=true`, {
+      method: 'POST', headers, signal: abortController?.signal
+    });
+    if (!uploadReq.ok) throw new Error(`Ошибка получения URL загрузки`);
+    const uploadUrl = (await uploadReq.json()).href;
+    const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, signal: abortController?.signal });
+    if (!putRes.ok) throw new Error(`Ошибка PUT: ${putRes.status}`);
+    log(`✅ Файл сохранён: ${fullPath}`);
+  }
+
+  async function processFolder(publicKey, targetPath) {
+    if (!isRunning) throw new Error('Остановлено');
+    log(`📂 Папка: ${targetPath}`);
+    updateStatus(`Обработка папки: ${targetPath}`);
+    await ensureFolder(targetPath);
+    let offset = 0;
+    const limit = 1000;
+    let hasMore = true;
+    while (hasMore && isRunning) {
+      const url = `${API}/resources/public?public_key=${publicKey}&limit=${limit}&offset=${offset}`;
+      const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
+      if (!resp.ok) throw new Error(`Не удалось получить содержимое: ${resp.status}`);
+      const data = await resp.json();
+      const items = data._embedded?.items || [];
+      for (const item of items) {
+        if (!isRunning) throw new Error('Остановлено');
+        if (item.type === 'file') await saveFile(item.public_key, targetPath, item.name);
+        else if (item.type === 'dir') await processFolder(item.public_key, `${targetPath}/${item.name}`);
+      }
+      hasMore = !!data._embedded?.next;
+      offset += limit;
+    }
+  }
+
+  async function processPublicLink(publicKey, targetPath) {
+    const metaResp = await fetch(`${API}/resources/public?public_key=${publicKey}`, {
+      headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
+    });
+    if (!metaResp.ok) throw new Error(`Не удалось получить информацию: ${metaResp.status}`);
+    const meta = await metaResp.json();
+    if (meta.type === 'file') await saveFile(publicKey, targetPath, meta.name);
+    else if (meta.type === 'dir') await processFolder(publicKey, targetPath);
+    else throw new Error('Неизвестный тип');
+  }
+
+  async function startProcess() {
+    const raw = document.getElementById('links-input').value.trim();
+    if (!raw) return alert('Вставьте ссылки');
+    const keys = raw.split(/\n/).map(u => extractPublicKey(u.trim())).filter(Boolean);
+    if (!keys.length) return alert('Не удалось распознать ссылки');
+
+    isRunning = true;
+    abortController = new AbortController();
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-stop').style.display = 'block';
+    log(`🚀 Найдено ресурсов: ${keys.length}`);
+    updateStatus(`Начало обработки...`);
+
+    let success = 0;
+    for (let i = 0; i < keys.length; i++) {
+      if (!isRunning) break;
+      document.getElementById('progress-text').innerText = `${i+1}/${keys.length}`;
+      document.getElementById('progress-fill').style.width = `${(i/keys.length)*100}%`;
+      try {
+        await processPublicLink(keys[i], TARGET_FOLDER);
+        success++;
       } catch (e) {
-        document.getElementById('folder-status').textContent = `❌ ${e.message}`;
-        log(`❌ Ошибка: ${e.message}`);
+        if (e.message === 'Остановлено') break;
+        log(`❌ Ошибка #${i+1}: ${e.message}`);
+        updateStatus(`Ошибка: ${e.message}`);
       }
+      await new Promise(r => setTimeout(r, 500));
     }
+    document.getElementById('progress-fill').style.width = '100%';
+    document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${keys.length}`;
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').style.display = 'none';
+    isRunning = false;
+    updateStatus(success === keys.length ? 'Завершено успешно' : 'Завершено с ошибками');
+  }
 
-    function parsePublicUrl(url) {
-      const match = url.trim().match(/(?:yadi\.sk|disk\.yandex\.ru)\/i\/([A-Za-z0-9_-]+)/);
-      return match ? match[1] : null;
-    }
-
-    async function startProcess() {
-      const raw = document.getElementById('links-input').value.trim();
-      if (!raw) return alert('Вставьте ссылки');
-      const urls = raw.split(/\n/).map(u => u.trim()).filter(Boolean);
-      const keys = urls.map(parsePublicUrl).filter(Boolean);
-      if (keys.length === 0) return alert('Ссылки не распознаны');
-
-      isRunning = true;
-      abortController = new AbortController();
-      document.getElementById('btn-start').disabled = true;
-      document.getElementById('btn-stop').style.display = 'block';
-      log(`🚀 Файлов: ${keys.length}`);
-
-      let success = 0;
-      for (let i = 0; i < keys.length; i++) {
-        if (!isRunning) break;
-        document.getElementById('progress-text').textContent = `${i + 1}/${keys.length}`;
-        document.getElementById('progress-fill').style.width = `${(i / keys.length) * 100}%`;
-        try {
-          await saveItem(keys[i], i + 1, keys.length);
-          success++;
-        } catch (e) { log(`❌ Ошибка #${i+1}: ${e.message}`); }
-        await new Promise(r => setTimeout(r, 500));
-      }
-      document.getElementById('progress-fill').style.width = '100%';
-      document.getElementById('progress-text').textContent = `✅ Готово: ${success}/${keys.length}`;
-      document.getElementById('btn-start').disabled = false;
-      document.getElementById('btn-stop').style.display = 'none';
-      isRunning = false;
-    }
-
-    function stopProcess() {
-      isRunning = false;
-      if (abortController) abortController.abort();
-      log('⏹ Остановлено');
-    }
-
-    async function saveItem(publicKey, current, total) {
-      const headers = { 'Authorization': `OAuth ${TOKEN}` };
-      log(`📥 [${current}/${total}] Информация...`);
-      const infoRes = await fetch(`${API}/resources/public/download?public_key=${publicKey}`, { headers, signal: abortController?.signal });
-      if (!infoRes.ok) throw new Error(`API: ${infoRes.status}`);
-      const info = await infoRes.json();
-      if (info.type === 'dir') throw new Error('Это папка');
-      
-      const fileName = info.name || `file_${publicKey}`;
-      log(`💾 Скачивание: ${fileName}`);
-      const dlRes = await fetch(info.href, { signal: abortController?.signal });
-      if (!dlRes.ok) throw new Error('Ошибка скачивания');
-      const blob = await dlRes.blob();
-      
-      const path = `${TARGET_FOLDER}/${fileName}`;
-      const upRes = await fetch(`${API}/resources/upload?path=${encodeURIComponent(path)}&overwrite=true`, { method: 'POST', headers, signal: abortController?.signal });
-      if (!upRes.ok) throw new Error('Ошибка загрузки');
-      const uploadUrl = (await upRes.json()).href;
-      
-      log(`☁️ Загрузка...`);
-      const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, signal: abortController?.signal });
-      if (!putRes.ok) throw new Error(`Загрузка: ${putRes.status}`);
-      log(`✅ ${fileName} сохранён`);
-    }
-  </script>
+  function stopProcess() {
+    isRunning = false;
+    if (abortController) abortController.abort();
+    log('⏹ Остановлено пользователем');
+    updateStatus('Остановка...');
+  }
+</script>
 </body>
 </html>

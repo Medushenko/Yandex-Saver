@@ -440,6 +440,7 @@
   async function saveFile(publicKey, targetPath, fileName) {
     const headers = { 'Authorization': `OAuth ${TOKEN}` };
     updateStatus(`Скачивание: ${fileName}`);
+    addLog(`📥 Скачивание файла: ${fileName}`);
     const dlInfo = await fetch(`${API}/resources/public/download?public_key=${publicKey}`, { headers, signal: abortController?.signal });
     if (!dlInfo.ok) throw new Error(`Не удалось получить ссылку на скачивание: ${dlInfo.status}`);
     const dlData = await dlInfo.json();
@@ -479,6 +480,15 @@
       if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
       const data = await resp.json();
       const items = data._embedded?.items || data.items || [];
+      
+      // Детальное логирование
+      const fileCount = items.filter(i => i.type === 'file').length;
+      const dirCount = items.filter(i => i.type === 'dir').length;
+      addLog(`📊 В папке найдено: ${fileCount} файлов, ${dirCount} подпапок`);
+      if (fileCount === 0 && dirCount === 0) {
+        addLog(`⚠️ Папка пуста (нет файлов и подпапок)`);
+      }
+      
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
@@ -556,7 +566,7 @@
         addLog(`❌ Ошибка #${i+1}: ${e.message}`);
         updateStatus(`Ошибка: ${e.message}`);
       }
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 1000)); // увеличенная задержка
     }
     document.getElementById('progress-fill').style.width = '100%';
     document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${keys.length}`;

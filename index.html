@@ -142,7 +142,7 @@
   let isRunning = false;
   let abortController = null;
   let popup = null;
-  let processedPublicKeys = new Set(); // для предотвращения циклов
+  let processedPublicKeys = new Set();
 
   // ---------- POPUP АВТОРИЗАЦИЯ ----------
   function startOAuthPopup() {
@@ -422,7 +422,7 @@
     return Array.from(keys);
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ (С ПОДДЕРЖКОЙ ПАПОК И ЗАЩИТОЙ ОТ ЦИКЛОВ) ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -459,10 +459,8 @@
     addLog(`✅ Файл сохранён: ${fullPath}`);
   }
 
-  // Обработка папки: рекурсивный обход содержимого с защитой от циклов
   async function processFolder(publicKey, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
-    // Защита от повторной обработки той же папки (циклические ссылки)
     if (processedPublicKeys.has(publicKey)) {
       addLog(`⚠️ Папка с ключом ${publicKey.substring(0, 20)}... уже обработана, пропускаем (цикл)`);
       return;
@@ -476,25 +474,35 @@
     let hasMore = true;
     while (hasMore && isRunning) {
       const url = `${API}/resources/public?public_key=${publicKey}&limit=${limit}&offset=${offset}`;
+      addLog(`🔍 Запрос к API: ${url.substring(0, 100)}...`);
       const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
       if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
       const data = await resp.json();
-      const items = data._embedded?.items || data.items || [];
-      
-      // Детальное логирование
+      // Пробуем извлечь items (в разных форматах)
+      let items = data._embedded?.items || data.items || [];
+      if (items.length === 0 && data._embedded && Object.keys(data._embedded).length > 0) {
+        // Если есть _embedded, но items пустой, возможно, ключ другой
+        addLog(`⚠️ В ответе нет items, но есть _embedded: ${JSON.stringify(Object.keys(data._embedded))}`);
+      }
       const fileCount = items.filter(i => i.type === 'file').length;
       const dirCount = items.filter(i => i.type === 'dir').length;
       addLog(`📊 В папке найдено: ${fileCount} файлов, ${dirCount} подпапок`);
       if (fileCount === 0 && dirCount === 0) {
-        addLog(`⚠️ Папка пуста (нет файлов и подпапок)`);
+        addLog(`⚠️ Папка пуста (нет файлов и подпапок). Ответ API: ${JSON.stringify(data).substring(0, 300)}`);
       }
-      
+      // Выводим первые 3 элемента для отладки
+      if (items.length > 0) {
+        addLog(`🔎 Первые элементы: ${JSON.stringify(items.slice(0, 3), null, 2)}`);
+      }
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
+          if (!item.public_key) {
+            addLog(`⚠️ У файла ${item.name} нет public_key, пропускаем.`);
+            continue;
+          }
           await saveFile(item.public_key, targetPath, item.name);
         } else if (item.type === 'dir') {
-          // Проверяем, не является ли подпапка ссылкой на текущую (по ключу)
           if (item.public_key === publicKey) {
             addLog(`⚠️ Обнаружена циклическая ссылка на папку ${item.name}, пропускаем`);
             continue;
@@ -509,7 +517,6 @@
     }
   }
 
-  // Главная обработка публичной ссылки
   async function processPublicLink(publicKey, targetPath) {
     const metaResp = await fetch(`${API}/resources/public?public_key=${publicKey}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
@@ -519,7 +526,6 @@
       return;
     }
     const meta = await metaResp.json();
-    
     if (meta.type === 'file') {
       await saveFile(publicKey, targetPath, meta.name);
     } else if (meta.type === 'dir') {
@@ -547,7 +553,7 @@
 
     isRunning = true;
     abortController = new AbortController();
-    processedPublicKeys.clear(); // очищаем набор перед новым запуском
+    processedPublicKeys.clear();
     document.getElementById('btn-start').disabled = true;
     document.getElementById('btn-stop').style.display = 'block';
     addLog(`🚀 Найдено уникальных ресурсов: ${keys.length}`);
@@ -566,7 +572,7 @@
         addLog(`❌ Ошибка #${i+1}: ${e.message}`);
         updateStatus(`Ошибка: ${e.message}`);
       }
-      await new Promise(r => setTimeout(r, 1000)); // увеличенная задержка
+      await new Promise(r => setTimeout(r, 1000));
     }
     document.getElementById('progress-fill').style.width = '100%';
     document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${keys.length}`;

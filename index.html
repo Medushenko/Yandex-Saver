@@ -91,7 +91,7 @@
 </div>
 
 <script>
-  // ---------- КОНФИГУРАЦИЯ ----------
+  // ========== КОНФИГУРАЦИЯ ==========
   const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
   const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
   const API = 'https://cloud-api.yandex.net/v1/disk';
@@ -103,10 +103,10 @@
   let popupTimer = null;
   let processedPublicKeys = new Set();
 
-  // ---------- POPUP АВТОРИЗАЦИЯ ----------
+  // ========== POPUP АВТОРИЗАЦИЯ (СОХРАНЕНА РАБОЧАЯ ВЕРСИЯ) ==========
   function startOAuthPopup() {
     updateStatus('Открытие окна авторизации...');
-    const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+    const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=disk:read%20disk:write`;
     const width = 600, height = 700;
     const left = (screen.width - width) / 2;
     const top = (screen.height - height) / 2;
@@ -130,10 +130,7 @@
   function receiveTokenFromPopup(event) {
     if (event.origin !== window.location.origin) return;
     if (event.data && event.data.type === 'yandex_token') {
-      if (popupTimer) {
-        clearTimeout(popupTimer);
-        popupTimer = null;
-      }
+      if (popupTimer) { clearTimeout(popupTimer); popupTimer = null; }
       const token = event.data.token;
       if (token) {
         addLog('🔑 Токен получен, проверяем...');
@@ -175,7 +172,7 @@
     }
   }
 
-  // ---------- ЗАГРУЗКА ----------
+  // ========== ЗАГРУЗКА ==========
   window.addEventListener('DOMContentLoaded', async () => {
     if (TOKEN) {
       addLog('Найден сохранённый токен, проверяем...');
@@ -191,15 +188,10 @@
 
   function copyLog() {
     const logText = document.getElementById('log').innerText;
-    if (!logText) {
-      alert('Лог пуст');
-      return;
-    }
+    if (!logText) { alert('Лог пуст'); return; }
     navigator.clipboard.writeText(logText).then(() => {
       addLog('📋 Лог скопирован в буфер обмена');
-    }).catch(() => {
-      alert('Не удалось скопировать лог');
-    });
+    }).catch(() => { alert('Не удалось скопировать лог'); });
   }
 
   function onAuthSuccess() {
@@ -224,9 +216,7 @@
     setTimeout(() => div.remove(), 5000);
   }
 
-  function updateStatus(msg) {
-    document.getElementById('current-status').innerText = msg;
-  }
+  function updateStatus(msg) { document.getElementById('current-status').innerText = msg; }
 
   function addLog(msg) {
     const el = document.getElementById('log');
@@ -247,7 +237,7 @@
     addLog('🔓 Вы вышли из аккаунта');
   }
 
-  // ---------- ВЫБОР ПАПКИ (БРАУЗЕР) ----------
+  // ========== ВЫБОР ПАПКИ ==========
   let currentBrowsePath = '/';
   const folderBrowserDiv = document.getElementById('folder-browser');
 
@@ -330,18 +320,13 @@
         } else {
           addLog(`❌ Ошибка создания: ${res.status}`);
         }
-      } catch (e) {
-        addLog(`❌ Ошибка: ${e.message}`);
-      } finally {
-        modal.style.display = 'none';
-      }
+      } catch (e) { addLog(`❌ Ошибка: ${e.message}`); }
+      finally { modal.style.display = 'none'; }
     };
-    document.getElementById('cancelNewFolderBtn').onclick = () => {
-      modal.style.display = 'none';
-    };
+    document.getElementById('cancelNewFolderBtn').onclick = () => { modal.style.display = 'none'; };
   }
 
-  // ---------- ПРОВЕРКА/СОЗДАНИЕ ПАПКИ ----------
+  // ========== ПРОВЕРКА/СОЗДАНИЕ ПАПКИ ==========
   async function validateAndCreateFolder() {
     let input = document.getElementById('folder-input').value.trim();
     if (!input || input === '/') {
@@ -362,15 +347,10 @@
           method: 'PUT',
           headers: { 'Authorization': `OAuth ${TOKEN}` }
         });
-        if (!createRes.ok) {
-          if (createRes.status === 409) {
-            addLog('⚠️ Папка уже существует (возможно, была создана параллельно)');
-          } else {
-            throw new Error(`Не удалось создать папку (${createRes.status})`);
-          }
-        } else {
-          addLog('✅ Папка создана');
+        if (!createRes.ok && createRes.status !== 409) {
+          throw new Error(`Не удалось создать папку (${createRes.status})`);
         }
+        addLog('✅ Папка создана');
       } else if (!res.ok) throw new Error(`Ошибка ${res.status}`);
       else addLog('✅ Папка уже существует');
       document.getElementById('folder-status').innerHTML = `✅ Готово: ${TARGET_FOLDER}`;
@@ -383,7 +363,7 @@
     }
   }
 
-  // ---------- ИЗВЛЕЧЕНИЕ ПУБЛИЧНЫХ ССЫЛОК ----------
+  // ========== ИЗВЛЕЧЕНИЕ ССЫЛОК ==========
   function extractAllPublicLinks(text) {
     const urlRegex = /https?:\/\/(?:disk\.yandex\.ru|yadi\.sk)\/[^\s]+/gi;
     const urls = text.match(urlRegex) || [];
@@ -392,100 +372,113 @@
     return uniqueUrls;
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ ----------
+  // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
     });
     if (res.status === 404) {
-      const create = await fetch(`${API}/resources?path=${encodeURIComponent(path)}&mkdir=true`, {
+      const create = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
         method: 'PUT',
         headers: { 'Authorization': `OAuth ${TOKEN}` }
       });
-      if (!create.ok) throw new Error(`Не удалось создать папку ${path} (${create.status})`);
+      if (!create.ok && create.status !== 409) {
+        throw new Error(`Не удалось создать папку ${path} (${create.status})`);
+      }
       addLog(`📁 Создана папка: ${path}`);
     } else if (!res.ok) throw new Error(`Ошибка проверки папки ${path}: ${res.status}`);
   }
 
-  // Функция сохранения публичного файла с указанием полного пути
-  async function savePublicFile(publicKeyOrUrl, fullTargetPath, fileName) {
-    updateStatus(`Сохранение файла: ${fileName}`);
-    addLog(`💾 Сохранение файла: ${fileName} → ${fullTargetPath}`);
-    
-    // Эндпоинт save-to-disk с параметром path
-    const saveUrl = `${API}/public/resources/save-to-disk?public_key=${encodeURIComponent(publicKeyOrUrl)}&name=${encodeURIComponent(fileName)}&path=${encodeURIComponent(fullTargetPath)}`;
-    const response = await fetch(saveUrl, {
+  // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ ФАЙЛА
+  // Используем надёжную схему: скачать → загрузить
+  async function savePublicFile(publicKeyOrUrl, folderPath, fileName) {
+    updateStatus(`Сохранение: ${fileName}`);
+    addLog(`💾 ${fileName} → ${folderPath}`);
+
+    // 1. Получаем информацию о публичном файле
+    const infoRes = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKeyOrUrl)}`, {
+      headers: { 'Authorization': `OAuth ${TOKEN}` },
+      signal: abortController?.signal
+    });
+    if (!infoRes.ok) throw new Error(`Не получен URL скачивания (${infoRes.status})`);
+    const downloadUrl = (await infoRes.json()).href;
+
+    // 2. Скачиваем файл как blob
+    addLog(`📥 Скачивание...`);
+    const fileRes = await fetch(downloadUrl, { signal: abortController?.signal });
+    if (!fileRes.ok) throw new Error(`Ошибка скачивания (${fileRes.status})`);
+    const blob = await fileRes.blob();
+
+    // 3. Получаем URL для загрузки на Диск (полный путь с именем файла!)
+    const fullPath = `${folderPath}/${fileName}`;
+    const uploadRes = await fetch(`${API}/resources/upload?path=${encodeURIComponent(fullPath)}&overwrite=true`, {
       method: 'POST',
       headers: { 'Authorization': `OAuth ${TOKEN}` },
       signal: abortController?.signal
     });
+    if (!uploadRes.ok) throw new Error(`Не получен URL загрузки (${uploadRes.status})`);
+    const uploadUrl = (await uploadRes.json()).href;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Не удалось сохранить файл: ${response.status} ${errText}`);
-    }
-
-    // Дожидаемся завершения операции (API может вернуть ссылку на статус)
-    const data = await response.json();
-    if (data.href) {
-      // Опционально можно проверить статус операции, но обычно файл уже сохранён
-      addLog(`✅ Файл сохранён: ${fullTargetPath}/${fileName}`);
-    } else {
-      addLog(`✅ Файл сохранён (без подтверждения): ${fullTargetPath}/${fileName}`);
-    }
+    // 4. Загружаем файл на Диск
+    addLog(`☁️ Загрузка на Диск...`);
+    const putRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: blob,
+      signal: abortController?.signal
+    });
+    if (!putRes.ok) throw new Error(`Ошибка загрузки (${putRes.status})`);
+    
+    addLog(`✅ Сохранён: ${fullPath}`);
   }
 
-  // Обработка папки
+  // ========== ОБРАБОТКА ПАПОК ==========
   async function processFolder(publicKeyOrUrl, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
     if (processedPublicKeys.has(publicKeyOrUrl)) {
-      addLog(`⚠️ Папка уже обработана, пропускаем (цикл)`);
+      addLog(`⚠️ Папка уже обработана, пропускаем`);
       return;
     }
     processedPublicKeys.add(publicKeyOrUrl);
     addLog(`📂 Обработка папки: ${targetPath}`);
-    updateStatus(`Обработка папки: ${targetPath}`);
+    updateStatus(`Обработка: ${targetPath}`);
+    
     await ensureFolder(targetPath);
 
     let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKeyOrUrl)}&limit=1000`;
     let hasMore = true;
+    
     while (hasMore && isRunning) {
-      addLog(`🔍 Запрос к API: ${url.substring(0, 100)}...`);
       const resp = await fetch(url, { signal: abortController?.signal });
-      if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
+      if (!resp.ok) throw new Error(`Не получено содержимое папки (${resp.status})`);
       const data = await resp.json();
       const items = data._embedded?.items || [];
-      const fileCount = items.filter(i => i.type === 'file').length;
-      const dirCount = items.filter(i => i.type === 'dir').length;
-      addLog(`📊 В папке найдено: ${fileCount} файлов, ${dirCount} подпапок`);
+      
+      addLog(`📊 Найдено: ${items.filter(i=>i.type==='file').length} файлов, ${items.filter(i=>i.type==='dir').length} папок`);
       
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
+        
         if (item.type === 'file') {
-          // Используем public_key элемента, если есть
           const fileKey = item.public_key || publicKeyOrUrl;
           await savePublicFile(fileKey, targetPath, item.name);
-        } else if (item.type === 'dir') {
+        } 
+        else if (item.type === 'dir') {
           if (!item.public_key) {
-            addLog(`⚠️ У папки ${item.name} нет public_key, пропускаем`);
+            addLog(`⚠️ У папки "${item.name}" нет public_key, пропускаем`);
             continue;
           }
-          // Рекурсивно обрабатываем подпапку, создавая соответствующий путь
+          // Рекурсивно обрабатываем подпапку
           await processFolder(item.public_key, `${targetPath}/${item.name}`);
-        } else {
-          addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
         }
       }
       
       hasMore = !!(data._embedded?.next || data.next);
       url = data._embedded?.next || data.next || '';
-      if (hasMore && !url) {
-        addLog(`⚠️ Ошибка пагинации: нет URL следующей страницы`);
-        break;
-      }
+      if (hasMore && !url) break;
     }
   }
 
+  // ✅ ИСПРАВЛЕННАЯ ОБРАБОТКА ПУБЛИЧНОЙ ССЫЛКИ
   async function processPublicLink(publicUrl, baseTargetPath) {
     const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, {
       signal: abortController?.signal
@@ -499,22 +492,28 @@
     if (meta.type === 'file') {
       // Файл сохраняем прямо в baseTargetPath
       await savePublicFile(publicUrl, baseTargetPath, meta.name);
-    } else if (meta.type === 'dir') {
-      // Создаём подпапку с именем публичной папки и обрабатываем её содержимое
+    } 
+    else if (meta.type === 'dir') {
+      // ✅ СОЗДАЁМ папку с именем из публичной ссылки, затем сохраняем внутрь
       const folderName = meta.name || 'Без имени';
       const newTargetPath = `${baseTargetPath}/${folderName}`;
       addLog(`📁 Создаём корневую папку: ${newTargetPath}`);
+      
+      // Сначала создаём папку
       await ensureFolder(newTargetPath);
+      // Затем обрабатываем содержимое публичной папки внутрь новой
       await processFolder(publicUrl, newTargetPath);
-    } else {
-      addLog(`⚠️ Неизвестный тип ресурса: ${JSON.stringify(meta).substring(0, 200)}`);
+    } 
+    else {
+      addLog(`⚠️ Неизвестный тип ресурса: ${meta.type}`);
     }
   }
 
-  // ---------- ОСНОВНОЙ ПРОЦЕСС ----------
+  // ========== ОСНОВНОЙ ПРОЦЕСС ==========
   async function startProcess() {
     const raw = document.getElementById('links-input').value.trim();
     if (!raw) return alert('Вставьте текст со ссылками');
+    
     const links = extractAllPublicLinks(raw);
     if (!links.length) return alert('Не найдено ни одной публичной ссылки на Яндекс.Диск');
 
@@ -549,6 +548,7 @@
       }
       await new Promise(r => setTimeout(r, 500));
     }
+    
     document.getElementById('progress-fill').style.width = '100%';
     document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${links.length}`;
     document.getElementById('btn-start').disabled = false;

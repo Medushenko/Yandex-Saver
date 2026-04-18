@@ -434,6 +434,8 @@
   // Функция для обработки папки
   async function processFolder(publicKeyOrUrl, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
+    
+    // Используем URL для идентификации уже обработанных папок, чтобы избежать циклов
     if (processedPublicKeys.has(publicKeyOrUrl)) {
       addLog(`⚠️ Папка уже обработана, пропускаем (цикл)`);
       return;
@@ -458,11 +460,20 @@
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
-          // Используем публичный ключ папки и путь к файлу
+          // Для файла используем public_key родительской папки и путь к файлу
           const filePublicKey = `${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`;
           await savePublicFile(filePublicKey, targetPath, item.name);
         } else if (item.type === 'dir') {
-          await processFolder(`${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`, `${targetPath}/${item.name}`);
+          // Критическое исправление: используем собственный public_key вложенной папки, если он есть,
+          // иначе конструируем корректный URL, но без добавления имени папки в targetPath повторно
+          if (item.public_key) {
+            // Если у папки есть свой public_key, используем его напрямую
+            await processFolder(item.public_key, `${targetPath}/${item.name}`);
+          } else {
+            // Иначе конструируем URL с параметром path
+            const subFolderKey = `${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`;
+            await processFolder(subFolderKey, `${targetPath}/${item.name}`);
+          }
         } else {
           addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
         }

@@ -392,7 +392,7 @@
     return uniqueUrls;
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ (СОХРАНЕНИЕ ЧЕРЕЗ API) ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ (ИСПРАВЛЕНО) ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -407,12 +407,15 @@
     } else if (!res.ok) throw new Error(`Ошибка проверки папки ${path}: ${res.status}`);
   }
 
-  // Функция для сохранения публичного файла
+  // Сохранение публичного файла в указанную папку на Диске
   async function savePublicFile(publicKeyOrUrl, targetPath, fileName) {
     updateStatus(`Сохранение файла: ${fileName}`);
     addLog(`💾 Сохранение файла: ${fileName}`);
     
-    const saveUrl = `${API}/public/resources/save-to-disk?public_key=${encodeURIComponent(publicKeyOrUrl)}&name=${encodeURIComponent(fileName)}`;
+    // Кодируем путь целевой папки
+    const encodedTargetPath = encodeURIComponent(targetPath);
+    const saveUrl = `${API}/public/resources/save-to-disk?public_key=${encodeURIComponent(publicKeyOrUrl)}&name=${encodeURIComponent(fileName)}&path=${encodedTargetPath}`;
+    
     const response = await fetch(saveUrl, {
       method: 'POST',
       headers: { 'Authorization': `OAuth ${TOKEN}` },
@@ -420,18 +423,16 @@
     });
 
     if (!response.ok) {
-      throw new Error(`Не удалось сохранить файл: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Не удалось сохранить файл: ${response.status} ${errorText}`);
     }
 
+    // Можно проверить статус операции, но обычно сразу возвращается ссылка на ресурс
     const data = await response.json();
-    if (data.href) {
-      addLog(`✅ Файл сохранён: ${targetPath}/${fileName}`);
-    } else {
-      throw new Error('Не удалось получить информацию о сохранённом файле');
-    }
+    addLog(`✅ Файл сохранён: ${targetPath}/${fileName}`);
   }
 
-  // Функция для обработки папки
+  // Рекурсивная обработка папки
   async function processFolder(publicKeyOrUrl, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
     if (processedPublicKeys.has(publicKeyOrUrl)) {
@@ -441,6 +442,8 @@
     processedPublicKeys.add(publicKeyOrUrl);
     addLog(`📂 Обработка папки: ${targetPath}`);
     updateStatus(`Обработка папки: ${targetPath}`);
+    
+    // Создаём целевую папку
     await ensureFolder(targetPath);
 
     let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKeyOrUrl)}&limit=1000`;
@@ -458,13 +461,28 @@
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
-          // Используем публичный ключ папки и путь к файлу
-          const filePublicKey = `${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`;
+          // Для файла используем его public_key, если есть, иначе собираем URL
+          let filePublicKey = item.public_key;
+          if (!filePublicKey) {
+            // Если public_key отсутствует, формируем ссылку вида public_key_папки?path=...
+            filePublicKey = `${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`;
+            addLog(`⚠️ У файла ${item.name} нет public_key, используем составной ключ`);
+          }
           await savePublicFile(filePublicKey, targetPath, item.name);
         } else if (item.type === 'dir') {
-          await processFolder(`${publicKeyOrUrl}?path=${encodeURIComponent(item.path)}`, `${targetPath}/${item.name}`);
+          // Для подпапки используем её собственный public_key
+          if (!item.public_key) {
+            addLog(`⚠️ У папки ${item.name} нет public_key, пропускаем`);
+            continue;
+          }
+          // Проверка на цикл
+          if (processedPublicKeys.has(item.public_key)) {
+            addLog(`⚠️ Обнаружена циклическая ссылка на папку ${item.name}, пропускаем`);
+            continue;
+          }
+          await processFolder(item.public_key, `${targetPath}/${item.name}`);
         } else {
-          addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
+          addLog(`⚠️ Неизвестный элемент: ${JSON.stringify(item)}`);
         }
       }
       
@@ -490,9 +508,6 @@
     if (meta.type === 'file') {
       await savePublicFile(publicUrl, targetPath, meta.name);
     } else if (meta.type === 'dir') {
-      await processFolder(publicUrl, targetPath);
-    } else if (meta._embedded?.items || meta.items) {
-      addLog(`📂 Обнаружена папка для ${publicUrl}`);
       await processFolder(publicUrl, targetPath);
     } else {
       addLog(`⚠️ Неизвестный тип ресурса: ${JSON.stringify(meta).substring(0, 200)}`);

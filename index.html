@@ -422,7 +422,7 @@
     return Array.from(keys);
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ (ИСПРАВЛЕННЫЕ ENDPOINT'Ы) ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -441,7 +441,8 @@
     const headers = { 'Authorization': `OAuth ${TOKEN}` };
     updateStatus(`Скачивание: ${fileName}`);
     addLog(`📥 Скачивание файла: ${fileName}`);
-    const dlInfo = await fetch(`${API}/resources/public/download?public_key=${publicKey}`, { headers, signal: abortController?.signal });
+    // Исправленный endpoint для получения ссылки на скачивание публичного файла
+    const dlInfo = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKey)}`, { headers, signal: abortController?.signal });
     if (!dlInfo.ok) throw new Error(`Не удалось получить ссылку на скачивание: ${dlInfo.status}`);
     const dlData = await dlInfo.json();
     const fileResp = await fetch(dlData.href, { signal: abortController?.signal });
@@ -473,24 +474,19 @@
     const limit = 1000;
     let hasMore = true;
     while (hasMore && isRunning) {
-      const url = `${API}/resources/public?public_key=${publicKey}&limit=${limit}&offset=${offset}`;
+      // Исправленный endpoint для получения содержимого публичной папки
+      const url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=${limit}&offset=${offset}`;
       addLog(`🔍 Запрос к API: ${url.substring(0, 100)}...`);
       const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
       if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
       const data = await resp.json();
-      // Пробуем извлечь items (в разных форматах)
-      let items = data._embedded?.items || data.items || [];
-      if (items.length === 0 && data._embedded && Object.keys(data._embedded).length > 0) {
-        // Если есть _embedded, но items пустой, возможно, ключ другой
-        addLog(`⚠️ В ответе нет items, но есть _embedded: ${JSON.stringify(Object.keys(data._embedded))}`);
-      }
+      const items = data._embedded?.items || data.items || [];
       const fileCount = items.filter(i => i.type === 'file').length;
       const dirCount = items.filter(i => i.type === 'dir').length;
       addLog(`📊 В папке найдено: ${fileCount} файлов, ${dirCount} подпапок`);
       if (fileCount === 0 && dirCount === 0) {
-        addLog(`⚠️ Папка пуста (нет файлов и подпапок). Ответ API: ${JSON.stringify(data).substring(0, 300)}`);
+        addLog(`⚠️ Папка пуста. Ответ API: ${JSON.stringify(data).substring(0, 300)}`);
       }
-      // Выводим первые 3 элемента для отладки
       if (items.length > 0) {
         addLog(`🔎 Первые элементы: ${JSON.stringify(items.slice(0, 3), null, 2)}`);
       }
@@ -518,7 +514,8 @@
   }
 
   async function processPublicLink(publicKey, targetPath) {
-    const metaResp = await fetch(`${API}/resources/public?public_key=${publicKey}`, {
+    // Исправленный endpoint для получения метаданных публичного ресурса
+    const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicKey)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
     });
     if (!metaResp.ok) {

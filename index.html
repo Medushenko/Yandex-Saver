@@ -417,7 +417,13 @@
     const keys = new Set();
     for (const url of urls) {
       const match = url.match(/(?:disk\.yandex\.ru|yadi\.sk)\/(?:i|d)\/([A-Za-z0-9_-]+)/);
-      if (match) keys.add(match[1]);
+      if (match) {
+        const key = match[1];
+        addLog(`🔍 Извлечён ключ: ${key} из URL: ${url}`);
+        keys.add(key);
+      } else {
+        addLog(`⚠️ Не удалось извлечь ключ из URL: ${url}`);
+      }
     }
     return Array.from(keys);
   }
@@ -441,7 +447,6 @@
     const headers = { 'Authorization': `OAuth ${TOKEN}` };
     updateStatus(`Скачивание: ${fileName}`);
     addLog(`📥 Скачивание файла: ${fileName}`);
-    // Исправленный endpoint для получения ссылки на скачивание публичного файла
     const dlInfo = await fetch(`${API}/public/resources/download?public_key=${encodeURIComponent(publicKey)}`, { headers, signal: abortController?.signal });
     if (!dlInfo.ok) throw new Error(`Не удалось получить ссылку на скачивание: ${dlInfo.status}`);
     const dlData = await dlInfo.json();
@@ -474,7 +479,6 @@
     const limit = 1000;
     let hasMore = true;
     while (hasMore && isRunning) {
-      // Исправленный endpoint для получения содержимого публичной папки
       const url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=${limit}&offset=${offset}`;
       addLog(`🔍 Запрос к API: ${url.substring(0, 100)}...`);
       const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
@@ -514,7 +518,6 @@
   }
 
   async function processPublicLink(publicKey, targetPath) {
-    // Исправленный endpoint для получения метаданных публичного ресурса
     const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicKey)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
     });

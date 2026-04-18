@@ -76,6 +76,7 @@
     .copy-log-btn {
       background: #4a6a8a;
       margin-top: 8px;
+      width: auto;
     }
   </style>
 </head>
@@ -118,7 +119,7 @@
 
   <div class="status-panel">📋 Статус: <span id="current-status">Ожидание</span></div>
   <div id="log" class="log"></div>
-  <button id="copyLogBtn" class="copy-log-btn" style="width: auto; margin-top: 8px;">📋 Копировать лог</button>
+  <button id="copyLogBtn" class="copy-log-btn">📋 Копировать лог</button>
 </div>
 
 <!-- Модальное окно для создания папки -->
@@ -141,6 +142,7 @@
   let isRunning = false;
   let abortController = null;
   let popup = null;
+  let processedPublicKeys = new Set(); // для предотвращения циклов
 
   // ---------- POPUP АВТОРИЗАЦИЯ ----------
   function startOAuthPopup() {
@@ -420,7 +422,7 @@
     return Array.from(keys);
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ (С ПОДДЕРЖКОЙ ПАПОК) ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ (С ПОДДЕРЖКОЙ ПАПОК И ЗАЩИТОЙ ОТ ЦИКЛОВ) ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -456,9 +458,15 @@
     addLog(`✅ Файл сохранён: ${fullPath}`);
   }
 
-  // Обработка папки: рекурсивный обход содержимого
+  // Обработка папки: рекурсивный обход содержимого с защитой от циклов
   async function processFolder(publicKey, targetPath) {
     if (!isRunning) throw new Error('Остановлено');
+    // Защита от повторной обработки той же папки (циклические ссылки)
+    if (processedPublicKeys.has(publicKey)) {
+      addLog(`⚠️ Папка с ключом ${publicKey.substring(0, 20)}... уже обработана, пропускаем (цикл)`);
+      return;
+    }
+    processedPublicKeys.add(publicKey);
     addLog(`📂 Обработка папки: ${targetPath}`);
     updateStatus(`Обработка папки: ${targetPath}`);
     await ensureFolder(targetPath);
@@ -470,13 +478,17 @@
       const resp = await fetch(url, { headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal });
       if (!resp.ok) throw new Error(`Не удалось получить содержимое папки: ${resp.status}`);
       const data = await resp.json();
-      // API может вернуть items как напрямую, так и внутри _embedded
       const items = data._embedded?.items || data.items || [];
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         if (item.type === 'file') {
           await saveFile(item.public_key, targetPath, item.name);
         } else if (item.type === 'dir') {
+          // Проверяем, не является ли подпапка ссылкой на текущую (по ключу)
+          if (item.public_key === publicKey) {
+            addLog(`⚠️ Обнаружена циклическая ссылка на папку ${item.name}, пропускаем`);
+            continue;
+          }
           await processFolder(item.public_key, `${targetPath}/${item.name}`);
         } else {
           addLog(`⚠️ Неизвестный элемент в папке: ${JSON.stringify(item)}`);
@@ -498,13 +510,11 @@
     }
     const meta = await metaResp.json();
     
-    // Определяем тип ресурса
     if (meta.type === 'file') {
       await saveFile(publicKey, targetPath, meta.name);
     } else if (meta.type === 'dir') {
       await processFolder(publicKey, targetPath);
     } else if (meta._embedded?.items || meta.items) {
-      // Если ответ содержит список items — это папка (публичная папка в API)
       addLog(`📂 Обнаружена папка (по наличию items) для ключа ${publicKey}`);
       await processFolder(publicKey, targetPath);
     } else {
@@ -527,6 +537,7 @@
 
     isRunning = true;
     abortController = new AbortController();
+    processedPublicKeys.clear(); // очищаем набор перед новым запуском
     document.getElementById('btn-start').disabled = true;
     document.getElementById('btn-stop').style.display = 'block';
     addLog(`🚀 Найдено уникальных ресурсов: ${keys.length}`);

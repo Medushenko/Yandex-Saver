@@ -105,7 +105,7 @@
 
   <div id="step-links" class="step">
     <label>3. Вставьте текст со ссылками</label>
-    <textarea id="links-input" rows="6" placeholder="Вставьте любое сообщение. Ссылки вида https://disk.yandex.ru/i/... или https://yadi.sk/d/... будут автоматически извлечены."></textarea>
+    <textarea id="links-input" rows="6" placeholder="Вставьте любое сообщение. Ссылки вида https://disk.yandex.ru/i/... или https://disk.yandex.ru/d/... будут автоматически извлечены."></textarea>
     <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
     <button id="btn-stop" class="secondary" style="display:none;" onclick="stopProcess()">⏹ Остановить</button>
     <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
@@ -267,8 +267,10 @@
   const folderBrowserDiv = document.getElementById('folder-browser');
 
   async function showFolderBrowser() {
-    currentBrowsePath = document.getElementById('folder-input').value.trim() || '/';
-    if (!currentBrowsePath.startsWith('/')) currentBrowsePath = '/' + currentBrowsePath;
+    let currentPath = document.getElementById('folder-input').value.trim();
+    if (!currentPath || currentPath === '/') currentPath = '/';
+    if (!currentPath.startsWith('/')) currentPath = '/' + currentPath;
+    currentBrowsePath = currentPath;
     await loadFolderContents(currentBrowsePath);
     folderBrowserDiv.style.display = 'block';
   }
@@ -284,7 +286,7 @@
       const items = data._embedded?.items || [];
       const folders = items.filter(i => i.type === 'dir');
       folderBrowserDiv.innerHTML = '';
-      // Кнопка "Наверх"
+      // Кнопка "Вверх"
       if (path !== '/') {
         const parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
         const upDiv = document.createElement('div');
@@ -358,6 +360,11 @@
   // ---------- ПРОВЕРКА/СОЗДАНИЕ ПАПКИ ----------
   async function validateAndCreateFolder() {
     let input = document.getElementById('folder-input').value.trim();
+    if (!input || input === '/') {
+      input = '/saved-materials';
+      document.getElementById('folder-input').value = input;
+      addLog(`⚠️ Путь не указан, используем по умолчанию: ${input}`);
+    }
     TARGET_FOLDER = input.startsWith('/') ? input : '/' + input;
     addLog(`📁 Проверка/создание папки: ${TARGET_FOLDER}`);
     updateStatus(`Проверка папки...`);
@@ -387,19 +394,17 @@
 
   // ---------- ИЗВЛЕЧЕНИЕ ПУБЛИЧНЫХ ССЫЛОК ИЗ ТЕКСТА ----------
   function extractAllPublicLinks(text) {
-    // Находим все URL, содержащие disk.yandex.ru или yadi.sk
     const urlRegex = /https?:\/\/(?:disk\.yandex\.ru|yadi\.sk)\/[^\s]+/gi;
     const urls = text.match(urlRegex) || [];
     const keys = new Set();
     for (const url of urls) {
-      // Извлекаем ключ: поддерживаем /i/ и /d/
       const match = url.match(/(?:disk\.yandex\.ru|yadi\.sk)\/(?:i|d)\/([A-Za-z0-9_-]+)/);
       if (match) keys.add(match[1]);
     }
     return Array.from(keys);
   }
 
-  // ---------- ОБРАБОТКА РЕСУРСОВ (С ПОДДЕРЖКОЙ НЕИЗВЕСТНЫХ ТИПОВ) ----------
+  // ---------- ОБРАБОТКА РЕСУРСОВ (С ПОДДЕРЖКОЙ ПАПОК) ----------
   async function ensureFolder(path) {
     const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }
@@ -451,8 +456,11 @@
       const items = data._embedded?.items || [];
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
-        if (item.type === 'file') await saveFile(item.public_key, targetPath, item.name);
-        else if (item.type === 'dir') await processFolder(item.public_key, `${targetPath}/${item.name}`);
+        if (item.type === 'file') {
+          await saveFile(item.public_key, targetPath, item.name);
+        } else if (item.type === 'dir') {
+          await processFolder(item.public_key, `${targetPath}/${item.name}`);
+        }
       }
       hasMore = !!data._embedded?.next;
       offset += limit;
@@ -460,6 +468,7 @@
   }
 
   async function processPublicLink(publicKey, targetPath) {
+    // Получаем информацию о публичном ресурсе
     const metaResp = await fetch(`${API}/resources/public?public_key=${publicKey}`, {
       headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
     });
@@ -468,12 +477,12 @@
       return;
     }
     const meta = await metaResp.json();
+    addLog(`🔍 Тип ресурса: ${meta.type}, имя: ${meta.name || 'без имени'}`);
     if (meta.type === 'file') {
       await saveFile(publicKey, targetPath, meta.name);
     } else if (meta.type === 'dir') {
       await processFolder(publicKey, targetPath);
     } else {
-      // Неизвестный тип — логируем и пропускаем
       addLog(`⚠️ Неизвестный тип ресурса: ${meta.type} для ключа ${publicKey}`);
       addLog(`   Ответ API: ${JSON.stringify(meta)}`);
     }
@@ -485,6 +494,12 @@
     if (!raw) return alert('Вставьте текст со ссылками');
     const keys = extractAllPublicLinks(raw);
     if (!keys.length) return alert('Не найдено ни одной публичной ссылки на Яндекс.Диск');
+
+    if (!TARGET_FOLDER) {
+      // Если папка не выбрана, пробуем взять из поля ввода
+      await validateAndCreateFolder();
+      if (!TARGET_FOLDER) return alert('Сначала выберите папку назначения');
+    }
 
     isRunning = true;
     abortController = new AbortController();

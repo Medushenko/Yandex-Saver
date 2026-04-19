@@ -54,7 +54,7 @@
 </head>
 <body>
 <div class="container">
-  <div class="header"><h1>🗂 Yandex Saver</h1><span class="badge">v3.0 🔧</span></div>
+  <div class="header"><h1>🗂 Yandex Saver</h1><span class="badge">v4.0 ✨</span></div>
   <div class="hint">Сохранение файлов и папок с публичных ссылок Яндекс.Диска с сохранением структуры</div>
 
   <div class="stage-indicator">
@@ -69,7 +69,6 @@
     <button onclick="logout()" style="width:auto;padding:8px 16px;background:var(--error);margin:0">Выйти</button>
   </div>
 
-  <!-- Этап 1: Авторизация -->
   <div id="step-auth" class="step active">
     <label>🔐 Подключите Яндекс.Диск</label>
     <button id="authPopupBtn">🔑 Авторизоваться (всплывающее окно)</button>
@@ -80,7 +79,6 @@
     </div>
   </div>
 
-  <!-- Этап 2: Папка -->
   <div id="step-folder" class="step">
     <label>📁 Папка назначения</label>
     <div style="display:flex;gap:10px">
@@ -93,7 +91,6 @@
     <button id="btn-next-links" style="display:none" onclick="goToStep('step-links');updateStage(3)">➡️ Далее: вставить ссылки</button>
   </div>
 
-  <!-- Этап 3: Ссылки -->
   <div id="step-links" class="step">
     <label>🔗 Вставьте текст со ссылками</label>
     <textarea id="links-input" rows="7" placeholder="Пример:&#10;• https://disk.yandex.ru/d/AbCdEfGhIjK&#10;• https://yadi.sk/i/XyZ123"></textarea>
@@ -135,10 +132,8 @@
   let abortController = null;
   let popup = null, popupTimer = null;
   
-  // 🔥 КРИТИЧЕСКИ ВАЖНО: отслеживаем обработанные пути внутри ПУБЛИЧНОЙ папки
-  // item.path из API — это АБСОЛЮТНЫЙ путь от корня публичной папки (напр. "/Docs/file.pdf")
+  // 🔥 Отслеживаем обработанные пути внутри ПУБЛИЧНОЙ папки (item.path — абсолютный от корня)
   let processedPublicPaths = new Set();
-  let originalPublicKey = null; // Сохраняем исходный public_key для корректной рекурсии
 
   // ========== 🔄 УПРАВЛЕНИЕ ЭТАПАМИ ==========
   function updateStage(n) {
@@ -262,12 +257,20 @@
   }
 
   // ========== 💾 СОХРАНЕНИЕ ФАЙЛА — 🔥 ИСПРАВЛЕНО ==========
-  async function savePublicFile(publicKey, targetPath, fileName) {
+  async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName) {
     if (!isRunning) throw new Error('Остановлено');
     updateStatus(`💾 ${fileName}`); addLog(`⬇️ Сохраняю: ${fileName}`);
     
-    // 🔥 КЛЮЧЕВОЕ: save_path — куда на ВАШЕМ диске, publicKey — идентификатор публичного файла
-    const params = new URLSearchParams({ public_key: publicKey, save_path: normalizePath(targetPath), name: fileName });
+    // 🔥 КЛЮЧЕВОЕ: 
+    // • public_key — исходный ключ публичной папки
+    // • path — путь к файлу ВНУТРИ публичной папки (абсолютный, напр. "/Docs/file.pdf")
+    // • save_path — куда на ВАШЕМ диске
+    const params = new URLSearchParams({ 
+      public_key: publicKey, 
+      path: filePathInPublic,      // ← путь внутри публичной папки
+      save_path: normalizePath(targetPath),
+      name: fileName 
+    });
     const response = await fetch(`${API}/public/resources/save-to-disk?${params}`, {
       method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
     });
@@ -279,19 +282,21 @@
     throw new Error('Неожиданный ответ API');
   }
 
-  // ========== 📂 ОБРАБОТКА ПАПОК — 🔥 ИСПРАВЛЕНА РЕКУРСИЯ ==========
-  async function processPublicFolder(initialPublicKey, targetBasePath) {
+  // ========== 📂 ОБРАБОТКА ПАПОК — 🔥 ПОЛНОСТЬЮ ПЕРЕПИСАНО ==========
+  async function processPublicFolder(publicKey, targetBasePath, publicFolderName) {
     if (!isRunning) throw new Error('Остановлено');
     
-    // 🔥 ВАЖНО: сохраняем исходный public_key для всех вложенных элементов
-    // item.path из API — это АБСОЛЮТНЫЙ путь от корня публичной папки (напр. "/Docs/file.pdf")
-    // НЕ нужно конструировать ключ рекурсивно — всегда используем: originalPublicKey + ?path=item.path
+    // 🔥 publicFolderName — имя публичной папки (первый уровень), напр. "Закрытый канал февраль 2025"
+    // 🔥 targetBasePath — куда сохраняем на вашем Диске, напр. "/saved-materials/qwer"
+    // 🔥 Итоговый корень для этой публичной папки: targetBasePath + / + publicFolderName
     
-    addLog(`📁 Обработка папки → ${targetBasePath}`); updateStatus(`📂 ${targetBasePath.split('/').pop() || 'корень'}`);
-    await ensureFolderExists(targetBasePath);
+    const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
+    addLog(`📁 Обработка папки "${publicFolderName}" → ${rootTargetPath}`);
+    updateStatus(`📂 ${publicFolderName}`);
+    await ensureFolderExists(rootTargetPath);
     
-    // Получаем содержимое публичной папки
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(initialPublicKey)}&limit=1000`;
+    // Получаем содержимое публичной папки (корень)
+    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
     
     while (url && isRunning) {
       const resp = await fetch(url, { signal: abortController?.signal });
@@ -304,22 +309,29 @@
       for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
         
-        // 🔥 КРИТИЧЕСКАЯ ПРОВЕРКА: предотвращаем циклы по абсолютному пути внутри публичной папки
-        if (processedPublicPaths.has(item.path)) { addLog(`⚠️ Пропуск уже обработанного: ${item.path}`); continue; }
+        // 🔥 item.path — АБСОЛЮТНЫЙ путь от корня публичной папки, напр. "/10 февраля/11 февраля"
+        // 🔥 Отслеживаем по этому пути, чтобы избежать дублей
+        if (processedPublicPaths.has(item.path)) { addLog(`⚠️ Пропуск: ${item.path}`); continue; }
         processedPublicPaths.add(item.path);
         
+        // 🔥 Строим целевой путь: корень_публичной_папки + относительный_путь_элемента
+        // item.path = "/10 февраля" → target = rootTargetPath + "/10 февраля"
+        // item.path = "/10 февраля/11 февраля" → target = rootTargetPath + "/10 февраля/11 февраля"
+        const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path; // убираем ведущий "/"
+        const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
+        
         if (item.type === 'file') {
-          // 🔥 Для файла: public_key = originalPublicKey + ?path=ABSOLUTE_path_из_корня_публичной_папки
-          // item.path уже абсолютный, напр. "/Docs/report.pdf" — не добавляем ничего лишнего!
-          const filePublicKey = `${initialPublicKey}?path=${encodeURIComponent(item.path)}`;
-          await savePublicFile(filePublicKey, targetBasePath, item.name);
+          // 🔥 Для файла: public_key + path (внутри публичной) + save_path (на вашем диске)
+          await savePublicFile(publicKey, item.path, rootTargetPath, item.name);
           
         } else if (item.type === 'dir') {
-          // 🔥 Для подпапки: целевой путь = base + имя_папки (не рекурсивное наращивание!)
-          const subFolderTarget = normalizePath(`${targetBasePath}/${item.name}`);
-          // 🔥 public_key для подпапки: originalPublicKey + ?path=item.path (item.path — абсолютный от корня публичной папки)
-          const subFolderPublicKey = `${initialPublicKey}?path=${encodeURIComponent(item.path)}`;
-          await processPublicFolder(subFolderPublicKey, subFolderTarget);
+          // 🔥 Для папки: создаём целевую папку и рекурсивно обрабатываем
+          await ensureFolderExists(itemTargetPath);
+          addLog(`📁 Создана: ${itemTargetPath}`);
+          
+          // 🔥 Для получения содержимого подпапки: тот же public_key + &path=item.path
+          const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
+          await processSubFolderContents(subUrl, publicKey, rootTargetPath, item.path);
         }
       }
       
@@ -329,14 +341,58 @@
     }
   }
 
+  // 🔥 Вспомогательная функция для обработки содержимого подпапки
+  async function processSubFolderContents(url, publicKey, rootTargetPath, parentPublicPath) {
+    if (!isRunning) return;
+    
+    const resp = await fetch(url, { signal: abortController?.signal });
+    if (!resp.ok) throw new Error(`Не прочитать подпапку: ${resp.status}`);
+    const data = await resp.json();
+    const items = data._embedded?.items || data.items || [];
+    
+    for (const item of items) {
+      if (!isRunning) throw new Error('Остановлено');
+      if (processedPublicPaths.has(item.path)) continue;
+      processedPublicPaths.add(item.path);
+      
+      // 🔥 item.path — абсолютный, напр. "/10 февраля/11 февраля"
+      // 🔥 relativePath = "10 февраля/11 февраля" (без ведущего "/")
+      const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
+      const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
+      
+      if (item.type === 'file') {
+        await savePublicFile(publicKey, item.path, rootTargetPath, item.name);
+      } else if (item.type === 'dir') {
+        await ensureFolderExists(itemTargetPath);
+        addLog(`📁 Создана: ${itemTargetPath}`);
+        // 🔥 Рекурсия для вложенной папки
+        const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
+        await processSubFolderContents(subUrl, publicKey, rootTargetPath, item.path);
+      }
+    }
+    
+    // Пагинация
+    const nextUrl = data._embedded?.next || data.next || null;
+    if (nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath, parentPublicPath);
+  }
+
   // ========== 🔗 ОБРАБОТКА ОДНОЙ ССЫЛКИ ==========
   async function processPublicLink(publicUrl, targetBasePath) {
+    // 🔥 Получаем метаданные публичного ресурса
     const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, { signal: abortController?.signal });
     if (!metaResp.ok) throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
     const meta = await metaResp.json();
     
-    if (meta.type === 'file') { addLog(`📄 Файл: ${meta.name}`); await savePublicFile(publicUrl, targetBasePath, meta.name); }
-    else if (meta.type === 'dir' || meta._embedded?.items) { addLog(`📁 Папка: ${meta.name || 'корень'}`); await processPublicFolder(publicUrl, targetBasePath); }
+    if (meta.type === 'file') {
+      addLog(`📄 Файл: ${meta.name}`);
+      await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name);
+    }
+    else if (meta.type === 'dir' || meta._embedded?.items) {
+      // 🔥 КЛЮЧЕВОЕ: publicFolderName — это имя самой публичной папки (первый уровень!)
+      const publicFolderName = meta.name || 'Без имени';
+      addLog(`📁 Папка: "${publicFolderName}"`);
+      await processPublicFolder(publicUrl, targetBasePath, publicFolderName);
+    }
     else throw new Error(`Неизвестный тип: ${meta.type}`);
   }
 

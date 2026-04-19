@@ -54,7 +54,7 @@
 </head>
 <body>
 <div class="container">
-  <div class="header"><h1>🗂 Yandex Saver</h1><span class="badge">v4.0 ✨</span></div>
+  <div class="header"><h1>🗂 Yandex Saver</h1><span class="badge">v4.1 ✨</span></div>
   <div class="hint">Сохранение файлов и папок с публичных ссылок Яндекс.Диска с сохранением структуры</div>
 
   <div class="stage-indicator">
@@ -131,303 +131,193 @@
   let isRunning = false;
   let abortController = null;
   let popup = null, popupTimer = null;
-  
-  // 🔥 Отслеживаем обработанные пути внутри ПУБЛИЧНОЙ папки (item.path — абсолютный от корня)
   let processedPublicPaths = new Set();
 
   // ========== 🔄 УПРАВЛЕНИЕ ЭТАПАМИ ==========
-  function updateStage(n) {
-    for (let i = 1; i <= 4; i++) {
-      const el = document.getElementById(`stage-${i}`);
-      el.classList.remove('active', 'done');
-      if (i < n) el.classList.add('done');
-      if (i === n) el.classList.add('active');
-    }
-  }
-  function goToStep(id) {
-    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-  }
+  function updateStage(n) { for (let i=1;i<=4;i++){const el=document.getElementById(`stage-${i}`);el.classList.remove('active','done');if(i<n)el.classList.add('done');if(i===n)el.classList.add('active');} }
+  function goToStep(id){document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
 
   // ========== 🔐 АВТОРИЗАЦИЯ ==========
-  function startOAuthPopup() {
-    updateStatus('🔐 Открытие окна авторизации...');
-    updateStage(1);
-    const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-    popup = window.open(authUrl, 'YandexAuth', `width=520,height=700,left=${Math.floor((screen.width-520)/2)},top=${Math.floor((screen.height-700)/2)}`);
-    if (!popup) { showMessage('error', '❌ Разрешите всплывающие окна для этого сайта'); return; }
-    window.addEventListener('message', handlePopupMessage);
-    popupTimer = setTimeout(() => { if (popup && !popup.closed) popup.close(); window.removeEventListener('message', handlePopupMessage); popupTimer = null; }, 5*60*1000);
-  }
-  function handlePopupMessage(event) {
-    if (event.origin !== window.location.origin || !event.data?.token) return;
-    if (popupTimer) { clearTimeout(popupTimer); popupTimer = null; }
-    verifyTokenAndProceed(event.data.token);
-    if (popup && !popup.closed) popup.close();
-    window.removeEventListener('message', handlePopupMessage);
-  }
-  if (window.opener && window.location.hash.includes('access_token=')) {
-    const match = window.location.hash.match(/access_token=([^&]+)/);
-    if (match?.[1]) { try { window.opener.postMessage({type:'yandex_token', token:decodeURIComponent(match[1])}, window.location.origin); } catch(e){} }
-    window.close();
-  }
-  async function verifyTokenAndProceed(token) {
-    updateStatus('✅ Проверка токена...');
-    try {
-      const test = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${token}` } });
-      if (test.ok) { TOKEN = token; sessionStorage.setItem('ydisk_token', TOKEN); addLog('🔑 Токен принят'); onAuthSuccess(); }
-      else { addLog(`❌ Токен отклонён: ${test.status}`); logout(); }
-    } catch(e) { addLog(`❌ Ошибка: ${e.message}`); logout(); }
-  }
+  function startOAuthPopup(){updateStatus('🔐 Открытие окна авторизации...');updateStage(1);const authUrl=`https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;popup=window.open(authUrl,'YandexAuth',`width=520,height=700,left=${Math.floor((screen.width-520)/2)},top=${Math.floor((screen.height-700)/2)}`);if(!popup){showMessage('error','❌ Разрешите всплывающие окна');return;}window.addEventListener('message',handlePopupMessage);popupTimer=setTimeout(()=>{if(popup&&!popup.closed)popup.close();window.removeEventListener('message',handlePopupMessage);popupTimer=null;},5*60*1000);}
+  function handlePopupMessage(event){if(event.origin!==window.location.origin||!event.data?.token)return;if(popupTimer){clearTimeout(popupTimer);popupTimer=null;}verifyTokenAndProceed(event.data.token);if(popup&&!popup.closed)popup.close();window.removeEventListener('message',handlePopupMessage);}
+  if(window.opener&&window.location.hash.includes('access_token=')){const match=window.location.hash.match(/access_token=([^&]+)/);if(match?.[1]){try{window.opener.postMessage({type:'yandex_token',token:decodeURIComponent(match[1])},window.location.origin);}catch(e){}}window.close();}
+  async function verifyTokenAndProceed(token){updateStatus('✅ Проверка токена...');try{const test=await fetch(`${API}/`,{headers:{'Authorization':`OAuth ${token}`}});if(test.ok){TOKEN=token;sessionStorage.setItem('ydisk_token',TOKEN);addLog('🔑 Токен принят');onAuthSuccess();}else{addLog(`❌ Токен отклонён: ${test.status}`);logout();}}catch(e){addLog(`❌ Ошибка: ${e.message}`);logout();}}
 
   // ========== 🚀 ИНИЦИАЛИЗАЦИЯ ==========
-  window.addEventListener('DOMContentLoaded', async () => {
-    document.getElementById('authPopupBtn').onclick = startOAuthPopup;
-    document.getElementById('browseFolderBtn').onclick = showFolderBrowser;
-    document.getElementById('copyLogBtn').onclick = copyLog;
-    document.getElementById('folder-input').oninput = updateTargetPreview;
-    document.getElementById('links-input').oninput = updateLinksCount;
-    if (TOKEN) { addLog('🔍 Проверка сохранённого токена...'); await verifyTokenAndProceed(TOKEN); }
-    else { addLog('⚠️ Требуется авторизация'); updateStatus('Не авторизован'); }
-  });
-  function updateTargetPreview() { const v = document.getElementById('folder-input').value.trim() || '/saved-materials'; document.getElementById('target-preview').textContent = v.startsWith('/') ? v : '/'+v; }
-  function updateLinksCount() { const t = document.getElementById('links-input').value; document.getElementById('links-count').textContent = (t.match(/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi) || []).length; }
-  function copyLog() { const t = document.getElementById('log').innerText; if (!t.trim()) { alert('📭 Лог пуст'); return; } navigator.clipboard.writeText(t).then(() => addLog('📋 Лог скопирован')); }
-  function onAuthSuccess() { showMessage('success', '✅ Яндекс.Диск подключён'); document.getElementById('user-block').style.display = 'flex'; document.getElementById('copyLogBtn').style.display = 'block'; updateStatus('Авторизация успешна'); updateStage(2); goToStep('step-folder'); }
-  function showMessage(type, text) { const c = document.getElementById('auth-message'); c.innerHTML = ''; const d = document.createElement('div'); d.className = type==='error'?'error-box':type==='warning'?'warning-box':'success-box'; d.innerHTML = text; c.appendChild(d); setTimeout(() => d.remove(), 7000); }
-  function updateStatus(msg) { document.getElementById('current-status').innerText = msg; }
-  function addLog(msg) { const el = document.getElementById('log'); el.style.display = 'block'; el.textContent += `[${new Date().toLocaleTimeString('ru-RU')}] ${msg}\n`; el.scrollTop = el.scrollHeight; console.log(`[YS] ${msg}`); }
-  function logout() { TOKEN = ''; sessionStorage.removeItem('ydisk_token'); document.getElementById('user-block').style.display = 'none'; document.getElementById('log').innerHTML = ''; document.getElementById('log').style.display = 'none'; document.getElementById('copyLogBtn').style.display = 'none'; document.getElementById('folder-browser').style.display = 'none'; updateStatus('🔓 Вы вышли'); updateStage(1); goToStep('step-auth'); addLog('👋 Сессия завершена'); if (popup && !popup.closed) popup.close(); if (popupTimer) clearTimeout(popupTimer); }
+  window.addEventListener('DOMContentLoaded',async()=>{document.getElementById('authPopupBtn').onclick=startOAuthPopup;document.getElementById('browseFolderBtn').onclick=showFolderBrowser;document.getElementById('copyLogBtn').onclick=copyLog;document.getElementById('folder-input').oninput=updateTargetPreview;document.getElementById('links-input').oninput=updateLinksCount;if(TOKEN){addLog('🔍 Проверка токена...');await verifyTokenAndProceed(TOKEN);}else{addLog('⚠️ Требуется авторизация');updateStatus('Не авторизован');}});
+  function updateTargetPreview(){const v=document.getElementById('folder-input').value.trim()||'/saved-materials';document.getElementById('target-preview').textContent=v.startsWith('/')?v:'/'+v;}
+  function updateLinksCount(){const t=document.getElementById('links-input').value;document.getElementById('links-count').textContent=(t.match(/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi)||[]).length;}
+  function copyLog(){const t=document.getElementById('log').innerText;if(!t.trim()){alert('📭 Лог пуст');return;}navigator.clipboard.writeText(t).then(()=>addLog('📋 Лог скопирован'));}
+  function onAuthSuccess(){showMessage('success','✅ Яндекс.Диск подключён');document.getElementById('user-block').style.display='flex';document.getElementById('copyLogBtn').style.display='block';updateStatus('Авторизация успешна');updateStage(2);goToStep('step-folder');}
+  function showMessage(type,text){const c=document.getElementById('auth-message');c.innerHTML='';const d=document.createElement('div');d.className=type==='error'?'error-box':type==='warning'?'warning-box':'success-box';d.innerHTML=text;c.appendChild(d);setTimeout(()=>d.remove(),7000);}
+  function updateStatus(msg){document.getElementById('current-status').innerText=msg;}
+  function addLog(msg){const el=document.getElementById('log');el.style.display='block';el.textContent+=`[${new Date().toLocaleTimeString('ru-RU')}] ${msg}\n`;el.scrollTop=el.scrollHeight;console.log(`[YS] ${msg}`);}
+  function logout(){TOKEN='';sessionStorage.removeItem('ydisk_token');document.getElementById('user-block').style.display='none';document.getElementById('log').innerHTML='';document.getElementById('log').style.display='none';document.getElementById('copyLogBtn').style.display='none';document.getElementById('folder-browser').style.display='none';updateStatus('🔓 Вы вышли');updateStage(1);goToStep('step-auth');addLog('👋 Сессия завершена');if(popup&&!popup.closed)popup.close();if(popupTimer)clearTimeout(popupTimer);}
 
   // ========== 📁 БРАУЗЕР ПАПОК ==========
-  async function showFolderBrowser() {
-    let p = document.getElementById('folder-input').value.trim() || '/'; if (!p.startsWith('/')) p = '/'+p;
-    await loadFolderContents(normalizePath(p)); document.getElementById('folder-browser').style.display = 'block';
-  }
-  async function loadFolderContents(path) {
-    const div = document.getElementById('folder-browser'); div.innerHTML = '<div style="text-align:center;padding:24px">⏳ Загрузка...</div>';
-    try {
-      const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}&limit=1000`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json(), items = (data._embedded?.items || []).filter(i => i.type === 'dir').sort((a,b) => a.name.localeCompare(b.name, 'ru'));
-      div.innerHTML = '';
-      if (path !== '/') { const up = document.createElement('div'); up.className = 'folder-item'; up.innerHTML = '<span>📁</span><span class="name">.. (вверх)</span>'; up.onclick = () => loadFolderContents(normalizePath(path.substring(0, path.lastIndexOf('/')) || '/')); div.appendChild(up); }
-      if (!items.length) { const e = document.createElement('div'); e.style.padding = '16px'; e.style.color = 'var(--text-light)'; e.textContent = '📭 Нет подпапок'; div.appendChild(e); }
-      else { for (const f of items) { const d = document.createElement('div'); d.className = 'folder-item'; d.innerHTML = `<span>📁</span><span class="name">${f.name}</span>`; d.onclick = () => loadFolderContents(normalizePath(path === '/' ? `/${f.name}` : `${path}/${f.name}`)); div.appendChild(d); } }
-      const actions = document.createElement('div'); actions.style.marginTop = '16px'; actions.style.display = 'flex'; actions.style.gap = '10px';
-      const sel = document.createElement('button'); sel.textContent = `✅ Выбрать: ${path}`; sel.className = 'new-folder-btn'; sel.style.margin = '0'; sel.onclick = () => { document.getElementById('folder-input').value = path; updateTargetPreview(); div.style.display = 'none'; validateAndCreateFolder(); };
-      const neu = document.createElement('button'); neu.textContent = '+ Новая папка'; neu.className = 'new-folder-btn'; neu.style.background = '#666'; neu.style.margin = '0'; neu.onclick = () => showNewFolderModal(path);
-      actions.appendChild(sel); actions.appendChild(neu); div.appendChild(actions);
-    } catch(e) { div.innerHTML = `<div style="color:var(--error);padding:16px;text-align:center">❌ ${e.message}</div>`; }
-  }
-  function showNewFolderModal(parent) {
-    const m = document.getElementById('newFolderModal'), inp = document.getElementById('newFolderName'); inp.value = ''; inp.focus(); m.style.display = 'flex';
-    const confirm = async () => { const name = inp.value.trim(); if (!name) return; const np = normalizePath(parent === '/' ? `/${name}` : `${parent}/${name}`); try { const r = await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } }); if (r.status === 201 || r.status === 200) { addLog(`📁 Создана: ${np}`); await loadFolderContents(parent); } else if (r.status === 409) showMessage('warning', `⚠️ Папка "${name}" уже существует`); else addLog(`❌ Ошибка: ${r.status}`); } catch(e) { addLog(`❌ ${e.message}`); } finally { m.style.display = 'none'; } };
-    document.getElementById('confirmNewFolderBtn').onclick = confirm; document.getElementById('cancelNewFolderBtn').onclick = () => m.style.display = 'none'; inp.onkeydown = e => { if (e.key === 'Enter') confirm(); };
-  }
+  async function showFolderBrowser(){let p=document.getElementById('folder-input').value.trim()||'/';if(!p.startsWith('/'))p='/'+p;await loadFolderContents(normalizePath(p));document.getElementById('folder-browser').style.display='block';}
+  async function loadFolderContents(path){const div=document.getElementById('folder-browser');div.innerHTML='<div style="text-align:center;padding:24px">⏳ Загрузка...</div>';try{const res=await fetch(`${API}/resources?path=${encodeURIComponent(path)}&limit=1000`,{headers:{'Authorization':`OAuth ${TOKEN}`}});if(!res.ok)throw new Error(`HTTP ${res.status}`);const data=await res.json(),items=(data._embedded?.items||[]).filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name,'ru'));div.innerHTML='';if(path!=='/'){const up=document.createElement('div');up.className='folder-item';up.innerHTML='<span>📁</span><span class="name">.. (вверх)</span>';up.onclick=()=>loadFolderContents(normalizePath(path.substring(0,path.lastIndexOf('/'))||'/'));div.appendChild(up);}if(!items.length){const e=document.createElement('div');e.style.padding='16px';e.style.color='var(--text-light)';e.textContent='📭 Нет подпапок';div.appendChild(e);}else{for(const f of items){const d=document.createElement('div');d.className='folder-item';d.innerHTML=`<span>📁</span><span class="name">${f.name}</span>`;d.onclick=()=>loadFolderContents(normalizePath(path==='/'?`/${f.name}`:`${path}/${f.name}`));div.appendChild(d);}}const actions=document.createElement('div');actions.style.marginTop='16px';actions.style.display='flex';actions.style.gap='10px';const sel=document.createElement('button');sel.textContent=`✅ Выбрать: ${path}`;sel.className='new-folder-btn';sel.style.margin='0';sel.onclick=()=>{document.getElementById('folder-input').value=path;updateTargetPreview();div.style.display='none';validateAndCreateFolder();};const neu=document.createElement('button');neu.textContent='+ Новая папка';neu.className='new-folder-btn';neu.style.background='#666';neu.style.margin='0';neu.onclick=()=>showNewFolderModal(path);actions.appendChild(sel);actions.appendChild(neu);div.appendChild(actions);}catch(e){div.innerHTML=`<div style="color:var(--error);padding:16px;text-align:center">❌ ${e.message}</div>`;}}
+  function showNewFolderModal(parent){const m=document.getElementById('newFolderModal'),inp=document.getElementById('newFolderName');inp.value='';inp.focus();m.style.display='flex';const confirm=async()=>{const name=inp.value.trim();if(!name)return;const np=normalizePath(parent==='/'?`/${name}`:`${parent}/${name}`);try{const r=await fetch(`${API}/resources?path=${encodeURIComponent(np)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(r.status===201||r.status===200){addLog(`📁 Создана: ${np}`);await loadFolderContents(parent);}else if(r.status===409)showMessage('warning',`⚠️ Папка "${name}" уже существует`);else addLog(`❌ Ошибка: ${r.status}`);}catch(e){addLog(`❌ ${e.message}`);}finally{m.style.display='none';}};document.getElementById('confirmNewFolderBtn').onclick=confirm;document.getElementById('cancelNewFolderBtn').onclick=()=>m.style.display='none';inp.onkeydown=e=>{if(e.key==='Enter')confirm();};}
 
   // ========== ✅ ПРОВЕРКА/СОЗДАНИЕ ПАПКИ ==========
-  async function validateAndCreateFolder() {
-    let input = document.getElementById('folder-input').value.trim(); if (!input || input === '/') { input = '/saved-materials'; document.getElementById('folder-input').value = input; }
-    TARGET_FOLDER = normalizePath(input); if (!TARGET_FOLDER.startsWith('/')) TARGET_FOLDER = '/' + TARGET_FOLDER;
-    addLog(`📁 Проверка: ${TARGET_FOLDER}`); updateStatus('🔍 Проверяю папку...');
-    try {
-      const check = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-      if (check.status === 404) { addLog('📭 Создаю папку...'); const cr = await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } }); if (!cr.ok && cr.status !== 409) throw new Error(`Не удалось создать (${cr.status})`); addLog(cr.status === 409 ? '⚠️ Создана параллельно' : '✅ Создана'); }
-      else if (!check.ok) throw new Error(`Ошибка: ${check.status}`); else addLog('✅ Уже существует');
-      document.getElementById('folder-status').innerHTML = `✅ Готово: <strong>${TARGET_FOLDER}</strong>`; document.getElementById('btn-next-links').style.display = 'block'; document.getElementById('target-preview').textContent = TARGET_FOLDER; updateStatus(`📁 Папка готова`); updateStage(2);
-    } catch(e) { document.getElementById('folder-status').innerHTML = `❌ ${e.message}`; addLog(`❌ ${e.message}`); updateStatus(`❌ ${e.message}`); }
-  }
+  async function validateAndCreateFolder(){let input=document.getElementById('folder-input').value.trim();if(!input||input==='/'){input='/saved-materials';document.getElementById('folder-input').value=input;}TARGET_FOLDER=normalizePath(input);if(!TARGET_FOLDER.startsWith('/'))TARGET_FOLDER='/'+TARGET_FOLDER;addLog(`📁 Проверка: ${TARGET_FOLDER}`);updateStatus('🔍 Проверяю папку...');try{const check=await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});if(check.status===404){addLog('📭 Создаю папку...');const cr=await fetch(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(!cr.ok&&cr.status!==409)throw new Error(`Не удалось создать (${cr.status})`);addLog(cr.status===409?'⚠️ Создана параллельно':'✅ Создана');}else if(!check.ok)throw new Error(`Ошибка: ${check.status}`);else addLog('✅ Уже существует');document.getElementById('folder-status').innerHTML=`✅ Готово: <strong>${TARGET_FOLDER}</strong>`;document.getElementById('btn-next-links').style.display='block';document.getElementById('target-preview').textContent=TARGET_FOLDER;updateStatus(`📁 Папка готова`);updateStage(2);}catch(e){document.getElementById('folder-status').innerHTML=`❌ ${e.message}`;addLog(`❌ ${e.message}`);updateStatus(`❌ ${e.message}`);}}
 
   // ========== 🔗 ИЗВЛЕЧЕНИЕ ССЫЛОК ==========
-  function extractAllPublicLinks(text) {
-    const regex = /https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi;
-    const found = text.match(regex) || [];
-    const unique = [...new Set(found.map(u => { try { const url = new URL(u); return `${url.protocol}//${url.host}${url.pathname}`; } catch { return u; } }))];
-    unique.forEach(u => addLog(`🔗 Найдена: ${u}`)); return unique;
-  }
+  function extractAllPublicLinks(text){const regex=/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi;const found=text.match(regex)||[];const unique=[...new Set(found.map(u=>{try{const url=new URL(u);return`${url.protocol}//${url.host}${url.pathname}`;}catch{return u;}}))];unique.forEach(u=>addLog(`🔗 Найдена: ${u}`));return unique;}
 
   // ========== 🛠️ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-  function normalizePath(p) { if (!p) return '/'; return p.replace(/\/+/g, '/').replace(/\/$/, '') || '/'; }
-  async function ensureFolderExists(path) {
-    const np = normalizePath(path); if (np === '/') return true;
-    const res = await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-    if (res.status === 404) { const parent = np.substring(0, np.lastIndexOf('/')) || '/'; await ensureFolderExists(parent); const cr = await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } }); if (!cr.ok && cr.status !== 409) throw new Error(`Не создать ${np}`); addLog(`📁 Создана: ${np}`); return true; }
-    else if (!res.ok) throw new Error(`Ошибка ${np}: ${res.status}`); return true;
+  function normalizePath(p){if(!p)return'/';return p.replace(/\/+/g,'/').replace(/\/$/,'')||'/';}
+  async function ensureFolderExists(path){const np=normalizePath(path);if(np==='/')return true;const res=await fetch(`${API}/resources?path=${encodeURIComponent(np)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});if(res.status===404){const parent=np.substring(0,np.lastIndexOf('/'))||'/';await ensureFolderExists(parent);const cr=await fetch(`${API}/resources?path=${encodeURIComponent(np)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(!cr.ok&&cr.status!==409)throw new Error(`Не создать ${np}`);addLog(`📁 Создана: ${np}`);return true;}else if(!res.ok)throw new Error(`Ошибка ${np}: ${res.status}`);return true;}
+  
+  // 🔥 НОВАЯ ФУНКЦИЯ: извлекает директорию из абсолютного пути в публичной папке
+  function getDirFromPublicPath(filePath){
+    // filePath: "/10 февраля/11 февраля/file.mp4" → "10 февраля/11 февраля"
+    // filePath: "/file.mp4" → ""
+    if(!filePath||filePath==='/')return'';
+    const parts=filePath.split('/').filter(p=>p&&p.trim());
+    if(parts.length<=1)return''; // файл в корне публичной папки
+    return parts.slice(0,-1).join('/'); // всё кроме имени файла
   }
 
-  // ========== 💾 СОХРАНЕНИЕ ФАЙЛА — 🔥 ИСПРАВЛЕНО ==========
-  async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName) {
-    if (!isRunning) throw new Error('Остановлено');
-    updateStatus(`💾 ${fileName}`); addLog(`⬇️ Сохраняю: ${fileName}`);
-    
-    // 🔥 КЛЮЧЕВОЕ: 
-    // • public_key — исходный ключ публичной папки
-    // • path — путь к файлу ВНУТРИ публичной папки (абсолютный, напр. "/Docs/file.pdf")
-    // • save_path — куда на ВАШЕМ диске
-    const params = new URLSearchParams({ 
-      public_key: publicKey, 
-      path: filePathInPublic,      // ← путь внутри публичной папки
-      save_path: normalizePath(targetPath),
-      name: fileName 
-    });
-    const response = await fetch(`${API}/public/resources/save-to-disk?${params}`, {
-      method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` }, signal: abortController?.signal
-    });
-    
-    if (response.status === 202) { addLog(`⏳ В очереди: ${fileName}`); return true; }
-    if (!response.ok) { const t = await response.text().catch(() => ''); throw new Error(`API ${response.status}: ${t.slice(0,200)}`); }
-    const result = await response.json();
-    if (result.href || result.path || result.name) { addLog(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`); return true; }
+  // ========== 💾 СОХРАНЕНИЕ ФАЙЛА ==========
+  async function savePublicFile(publicKey,filePathInPublic,targetPath,fileName){
+    if(!isRunning)throw new Error('Остановлено');
+    updateStatus(`💾 ${fileName}`);addLog(`⬇️ Сохраняю: ${fileName}`);
+    const params=new URLSearchParams({public_key:publicKey,path:filePathInPublic,save_path:normalizePath(targetPath),name:fileName});
+    const response=await fetch(`${API}/public/resources/save-to-disk?${params}`,{method:'POST',headers:{'Authorization':`OAuth ${TOKEN}`},signal:abortController?.signal});
+    if(response.status===202){addLog(`⏳ В очереди: ${fileName}`);return true;}
+    if(!response.ok){const t=await response.text().catch(()=> '');throw new Error(`API ${response.status}: ${t.slice(0,200)}`);}
+    const result=await response.json();
+    if(result.href||result.path||result.name){addLog(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name||fileName}`)}`);return true;}
     throw new Error('Неожиданный ответ API');
   }
 
-  // ========== 📂 ОБРАБОТКА ПАПОК — 🔥 ПОЛНОСТЬЮ ПЕРЕПИСАНО ==========
-  async function processPublicFolder(publicKey, targetBasePath, publicFolderName) {
-    if (!isRunning) throw new Error('Остановлено');
-    
-    // 🔥 publicFolderName — имя публичной папки (первый уровень), напр. "Закрытый канал февраль 2025"
-    // 🔥 targetBasePath — куда сохраняем на вашем Диске, напр. "/saved-materials/qwer"
-    // 🔥 Итоговый корень для этой публичной папки: targetBasePath + / + publicFolderName
-    
-    const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
+  // ========== 📂 ОБРАБОТКА ПАПОК — 🔥 ИСПРАВЛЕНО РАСПОЛОЖЕНИЕ ФАЙЛОВ ==========
+  async function processPublicFolder(publicKey,targetBasePath,publicFolderName){
+    if(!isRunning)throw new Error('Остановлено');
+    const rootTargetPath=normalizePath(`${targetBasePath}/${publicFolderName}`);
     addLog(`📁 Обработка папки "${publicFolderName}" → ${rootTargetPath}`);
     updateStatus(`📂 ${publicFolderName}`);
     await ensureFolderExists(rootTargetPath);
     
-    // Получаем содержимое публичной папки (корень)
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
-    
-    while (url && isRunning) {
-      const resp = await fetch(url, { signal: abortController?.signal });
-      if (!resp.ok) throw new Error(`Не прочитать папку: ${resp.status}`);
-      const data = await resp.json();
-      const items = data._embedded?.items || data.items || [];
+    let url=`${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
+    while(url&&isRunning){
+      const resp=await fetch(url,{signal:abortController?.signal});
+      if(!resp.ok)throw new Error(`Не прочитать папку: ${resp.status}`);
+      const data=await resp.json();
+      const items=data._embedded?.items||data.items||[];
+      if(items.length)addLog(`📊 Найдено: ${items.filter(i=>i.type==='file').length} файлов, ${items.filter(i=>i.type==='dir').length} папок`);
       
-      if (items.length) addLog(`📊 Найдено: ${items.filter(i=>i.type==='file').length} файлов, ${items.filter(i=>i.type==='dir').length} папок`);
-      
-      for (const item of items) {
-        if (!isRunning) throw new Error('Остановлено');
-        
-        // 🔥 item.path — АБСОЛЮТНЫЙ путь от корня публичной папки, напр. "/10 февраля/11 февраля"
-        // 🔥 Отслеживаем по этому пути, чтобы избежать дублей
-        if (processedPublicPaths.has(item.path)) { addLog(`⚠️ Пропуск: ${item.path}`); continue; }
+      for(const item of items){
+        if(!isRunning)throw new Error('Остановлено');
+        if(processedPublicPaths.has(item.path)){addLog(`⚠️ Пропуск: ${item.path}`);continue;}
         processedPublicPaths.add(item.path);
         
-        // 🔥 Строим целевой путь: корень_публичной_папки + относительный_путь_элемента
-        // item.path = "/10 февраля" → target = rootTargetPath + "/10 февраля"
-        // item.path = "/10 февраля/11 февраля" → target = rootTargetPath + "/10 февраля/11 февраля"
-        const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path; // убираем ведущий "/"
-        const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
+        // 🔥 Вычисляем относительный путь для построения целевого пути
+        const relativePath=item.path.startsWith('/')?item.path.substring(1):item.path;
+        const itemTargetPath=normalizePath(`${rootTargetPath}/${relativePath}`);
         
-        if (item.type === 'file') {
-          // 🔥 Для файла: public_key + path (внутри публичной) + save_path (на вашем диске)
-          await savePublicFile(publicKey, item.path, rootTargetPath, item.name);
+        if(item.type==='file'){
+          // 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: определяем, в какую папку сохранять файл
+          const dirInPublic=getDirFromPublicPath(item.path);
+          const fileTargetPath=dirInPublic?normalizePath(`${rootTargetPath}/${dirInPublic}`):rootTargetPath;
+          await savePublicFile(publicKey,item.path,fileTargetPath,item.name);
           
-        } else if (item.type === 'dir') {
-          // 🔥 Для папки: создаём целевую папку и рекурсивно обрабатываем
+        }else if(item.type==='dir'){
+          // Создаём папку и обрабатываем её содержимое
           await ensureFolderExists(itemTargetPath);
           addLog(`📁 Создана: ${itemTargetPath}`);
-          
-          // 🔥 Для получения содержимого подпапки: тот же public_key + &path=item.path
-          const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-          await processSubFolderContents(subUrl, publicKey, rootTargetPath, item.path);
+          const subUrl=`${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
+          await processSubFolderContents(subUrl,publicKey,rootTargetPath);
         }
       }
-      
-      // Пагинация
-      url = data._embedded?.next || data.next || null;
-      if (url) addLog(`🔄 Следующая страница...`);
+      url=data._embedded?.next||data.next||null;
+      if(url)addLog(`🔄 Следующая страница...`);
     }
   }
 
   // 🔥 Вспомогательная функция для обработки содержимого подпапки
-  async function processSubFolderContents(url, publicKey, rootTargetPath, parentPublicPath) {
-    if (!isRunning) return;
+  async function processSubFolderContents(url,publicKey,rootTargetPath){
+    if(!isRunning)return;
+    const resp=await fetch(url,{signal:abortController?.signal});
+    if(!resp.ok)throw new Error(`Не прочитать подпапку: ${resp.status}`);
+    const data=await resp.json();
+    const items=data._embedded?.items||data.items||[];
     
-    const resp = await fetch(url, { signal: abortController?.signal });
-    if (!resp.ok) throw new Error(`Не прочитать подпапку: ${resp.status}`);
-    const data = await resp.json();
-    const items = data._embedded?.items || data.items || [];
-    
-    for (const item of items) {
-      if (!isRunning) throw new Error('Остановлено');
-      if (processedPublicPaths.has(item.path)) continue;
+    for(const item of items){
+      if(!isRunning)throw new Error('Остановлено');
+      if(processedPublicPaths.has(item.path))continue;
       processedPublicPaths.add(item.path);
       
-      // 🔥 item.path — абсолютный, напр. "/10 февраля/11 февраля"
-      // 🔥 relativePath = "10 февраля/11 февраля" (без ведущего "/")
-      const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-      const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
-      
-      if (item.type === 'file') {
-        await savePublicFile(publicKey, item.path, rootTargetPath, item.name);
-      } else if (item.type === 'dir') {
+      if(item.type==='file'){
+        // 🔥 ИСПРАВЛЕНИЕ: вычисляем целевую папку на основе item.path
+        const dirInPublic=getDirFromPublicPath(item.path);
+        const fileTargetPath=dirInPublic?normalizePath(`${rootTargetPath}/${dirInPublic}`):rootTargetPath;
+        await savePublicFile(publicKey,item.path,fileTargetPath,item.name);
+        
+      }else if(item.type==='dir'){
+        const relativePath=item.path.startsWith('/')?item.path.substring(1):item.path;
+        const itemTargetPath=normalizePath(`${rootTargetPath}/${relativePath}`);
         await ensureFolderExists(itemTargetPath);
         addLog(`📁 Создана: ${itemTargetPath}`);
-        // 🔥 Рекурсия для вложенной папки
-        const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-        await processSubFolderContents(subUrl, publicKey, rootTargetPath, item.path);
+        const subUrl=`${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
+        await processSubFolderContents(subUrl,publicKey,rootTargetPath);
       }
     }
-    
-    // Пагинация
-    const nextUrl = data._embedded?.next || data.next || null;
-    if (nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath, parentPublicPath);
+    const nextUrl=data._embedded?.next||data.next||null;
+    if(nextUrl&&isRunning)await processSubFolderContents(nextUrl,publicKey,rootTargetPath);
   }
 
   // ========== 🔗 ОБРАБОТКА ОДНОЙ ССЫЛКИ ==========
-  async function processPublicLink(publicUrl, targetBasePath) {
-    // 🔥 Получаем метаданные публичного ресурса
-    const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, { signal: abortController?.signal });
-    if (!metaResp.ok) throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
-    const meta = await metaResp.json();
+  async function processPublicLink(publicUrl,targetBasePath){
+    const metaResp=await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`,{signal:abortController?.signal});
+    if(!metaResp.ok)throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
+    const meta=await metaResp.json();
     
-    if (meta.type === 'file') {
+    if(meta.type==='file'){
       addLog(`📄 Файл: ${meta.name}`);
-      await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name);
+      await savePublicFile(publicUrl,meta.path||`/${meta.name}`,targetBasePath,meta.name);
     }
-    else if (meta.type === 'dir' || meta._embedded?.items) {
-      // 🔥 КЛЮЧЕВОЕ: publicFolderName — это имя самой публичной папки (первый уровень!)
-      const publicFolderName = meta.name || 'Без имени';
+    else if(meta.type==='dir'||meta._embedded?.items){
+      const publicFolderName=meta.name||'Без имени';
       addLog(`📁 Папка: "${publicFolderName}"`);
-      await processPublicFolder(publicUrl, targetBasePath, publicFolderName);
+      await processPublicFolder(publicUrl,targetBasePath,publicFolderName);
     }
     else throw new Error(`Неизвестный тип: ${meta.type}`);
   }
 
   // ========== 🚀 ОСНОВНОЙ ПРОЦЕСС ==========
-  async function startProcess() {
-    const raw = document.getElementById('links-input').value.trim(); if (!raw) return alert('⚠️ Вставьте ссылки');
+  async function startProcess(){
+    const raw=document.getElementById('links-input').value.trim();if(!raw)return alert('⚠️ Вставьте ссылки');
     updateStage(4);
-    const links = extractAllPublicLinks(raw); if (!links.length) return alert('❌ Нет корректных ссылок');
-    if (!TARGET_FOLDER) { await validateAndCreateFolder(); if (!TARGET_FOLDER) return alert('❌ Укажите папку'); }
+    const links=extractAllPublicLinks(raw);if(!links.length)return alert('❌ Нет корректных ссылок');
+    if(!TARGET_FOLDER){await validateAndCreateFolder();if(!TARGET_FOLDER)return alert('❌ Укажите папку');}
     
-    isRunning = true; abortController = new AbortController(); processedPublicPaths.clear(); // 🔥 Сброс перед запуском
-    document.getElementById('btn-start').disabled = true; document.getElementById('btn-stop').style.display = 'block';
-    document.getElementById('progress-fill').style.width = '0%'; document.getElementById('progress-text').innerText = '';
+    isRunning=true;abortController=new AbortController();processedPublicPaths.clear();
+    document.getElementById('btn-start').disabled=true;document.getElementById('btn-stop').style.display='block';
+    document.getElementById('progress-fill').style.width='0%';document.getElementById('progress-text').innerText='';
     
-    addLog(`🚀 Старт: ${links.length} ссылок | 📁 ${TARGET_FOLDER}`); updateStatus(`⏳ 1/${links.length}...`);
+    addLog(`🚀 Старт: ${links.length} ссылок | 📁 ${TARGET_FOLDER}`);updateStatus(`⏳ 1/${links.length}...`);
     
-    let success = 0, errors = 0;
-    for (let i = 0; i < links.length; i++) {
-      if (!isRunning) break;
-      const progress = Math.round((i / links.length) * 100); document.getElementById('progress-fill').style.width = `${progress}%`;
-      document.getElementById('progress-text').innerText = `Обработка: ${i+1}/${links.length}`;
+    let success=0,errors=0;
+    for(let i=0;i<links.length;i++){
+      if(!isRunning)break;
+      const progress=Math.round((i/links.length)*100);document.getElementById('progress-fill').style.width=`${progress}%`;
+      document.getElementById('progress-text').innerText=`Обработка: ${i+1}/${links.length}`;
       updateStatus(`⏳ ${i+1}/${links.length}: ${links[i].slice(0,40)}${links[i].length>40?'...':''}`);
       
-      try { await processPublicLink(links[i], TARGET_FOLDER); success++; addLog(`✅ Ссылка #${i+1}`); }
-      catch (e) { if (e.name === 'AbortError' || e.message === 'Остановлено') { addLog('⏹ Остановлено'); break; } errors++; addLog(`❌ #${i+1}: ${e.message}`); updateStatus(`❌ ${e.message}`); }
-      await new Promise(r => setTimeout(r, 500)); // ⏱ Пауза для лимитов API
+      try{await processPublicLink(links[i],TARGET_FOLDER);success++;addLog(`✅ Ссылка #${i+1}`);}
+      catch(e){if(e.name==='AbortError'||e.message==='Остановлено'){addLog('⏹ Остановлено');break;}errors++;addLog(`❌ #${i+1}: ${e.message}`);updateStatus(`❌ ${e.message}`);}
+      await new Promise(r=>setTimeout(r,500));
     }
     
-    document.getElementById('progress-fill').style.width = '100%'; document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${links.length}`;
-    document.getElementById('btn-start').disabled = false; document.getElementById('btn-stop').style.display = 'none'; isRunning = false;
+    document.getElementById('progress-fill').style.width='100%';document.getElementById('progress-text').innerText=`✅ Готово: ${success}/${links.length}`;
+    document.getElementById('btn-start').disabled=false;document.getElementById('btn-stop').style.display='none';isRunning=false;
     
-    if (errors === 0) { updateStatus('🎉 Успешно!'); addLog('🎉 Завершено без ошибок'); showMessage('success', `✅ Сохранено: ${success}/${links.length}`); }
-    else { updateStatus(`⚠️ ${success}/${links.length} успешно`); addLog(`⚠️ Ошибок: ${errors}`); showMessage('warning', `⚠️ ${success} успешно, ${errors} ошибок`); }
+    if(errors===0){updateStatus('🎉 Успешно!');addLog('🎉 Завершено без ошибок');showMessage('success',`✅ Сохранено: ${success}/${links.length}`);}
+    else{updateStatus(`⚠️ ${success}/${links.length} успешно`);addLog(`⚠️ Ошибок: ${errors}`);showMessage('warning',`⚠️ ${success} успешно, ${errors} ошибок`);}
   }
-  function stopProcess() { isRunning = false; if (abortController) abortController.abort(); addLog('⏹ Остановка...'); updateStatus('⏹ Остановка...'); }
+  function stopProcess(){isRunning=false;if(abortController)abortController.abort();addLog('⏹ Остановка...');updateStatus('⏹ Остановка...');}
 </script>
 </body>
 </html>

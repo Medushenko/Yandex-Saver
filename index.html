@@ -387,15 +387,17 @@
   // ========== 💾 ИНФОРМАЦИЯ О ДИСКЕ ==========
   function formatBytes(bytes){if(bytes==null||bytes===0)return'0 Б';const k=1024;const sizes=['Б','КБ','МБ','ГБ','ТБ','ПБ'];const i=Math.floor(Math.log(bytes)/Math.log(k));return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+' '+sizes[i];}
   
-  async function getDiskInfo(){
-    try{
-      await throttler.waitIfNeeded();
-      const res=await fetchWithRetry(`${API}/`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
-      if(!res.ok)throw new Error(`HTTP ${res.status}`);
-      const data=await res.json();
-      return{total_space:Number(data.total_space??0),used_space:Number(data.used_space??0),free_space:Number(data.free_space??0)};
-    }catch(e){addLog(`❌ Ошибка получения инфо о диске: ${e.message}`);return{total_space:0,used_space:0,free_space:0};}
-  }
+ async function getDiskInfo(){
+  const res = await fetch('https://cloud-api.yandex.net/v1/disk', {
+    headers: { 'Authorization': `OAuth ${TOKEN}` }  // 🔥 Прямой запрос по документации Яндекса
+  });
+  const data = await res.json();
+  // 🔥 Явное приведение к числу
+  return { 
+    free_space: Number(data.free_space) || 0,  // 🔥 Гарантирует число, а не null
+    total_space: Number(data.total_space) || 0 
+  };
+}
 
   async function updateDiskInfoDisplay(){
     if(!TOKEN)return;

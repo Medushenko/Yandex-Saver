@@ -25,6 +25,7 @@
     button:disabled{background:#ccc;cursor:not-allowed;transform:none}
     button.secondary{background:#666}
     button.secondary:hover{background:#555}
+    button.small{padding:8px 14px;font-size:.9rem;width:auto;margin-left:8px}
     .hint{font-size:.9rem;color:var(--text-light);margin-bottom:14px;line-height:1.5}
     .error-box{background:#ffebee;color:#c62828;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--error)}
     .success-box{background:#e8f5e9;color:#2e7d32;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--success)}
@@ -58,17 +59,25 @@
     .file-preview code{background:#e9ecef;padding:2px 6px;border-radius:4px;font-family:monospace}
     .scan-status{background:#fff8e1;color:#856404;padding:10px 14px;border-radius:10px;margin:10px 0;font-size:.9rem;display:none}
     .scan-status.active{display:block}
+    .file-upload-area{border:2px dashed var(--border);border-radius:12px;padding:16px;text-align:center;margin:12px 0;background:#fafafa;transition:border-color .2s}
+    .file-upload-area:hover{border-color:var(--primary)}
+    .file-upload-area.dragover{border-color:var(--primary);background:#fff5f5}
+    .file-upload-btn{background:var(--info);margin:0}
+    .file-upload-btn:hover{background:#1976d2}
+    .report-btn{background:var(--success);margin-top:8px}
+    .report-btn:hover{background:#388e3c}
+    .report-btn:disabled{background:#ccc}
     .connection-status{position:fixed;top:12px;right:12px;padding:8px 14px;border-radius:20px;font-size:.85rem;font-weight:500;z-index:1001;transition:all .3s;box-shadow:0 4px 12px rgba(0,0,0,.15)}
     .connection-status.online{background:var(--success);color:#fff}
     .connection-status.offline{background:var(--error);color:#fff}
     .connection-status.hidden{opacity:0;pointer-events:none}
-    @media(max-width:600px){.container{padding:20px;border-radius:16px}.log{height:220px}.disk-info{margin-left:0;margin-top:10px;width:100%;justify-content:space-around}.connection-status{top:auto;bottom:12px;right:12px}}
+    @media(max-width:600px){.container{padding:20px;border-radius:16px}.log{height:220px}.disk-info{margin-left:0;margin-top:10px;width:100%;justify-content:space-around}.connection-status{top:auto;bottom:12px;right:12px}.file-preview{flex-direction:column;gap:8px}}
   </style>
 </head>
 <body>
 <div class="container">
-  <div class="header"><h1>🗂 Yandex Saver</h1><span class="badge">v5.1 ✨</span></div>
-  <div class="hint">Сохранение файлов с проверкой дублей, контролем места и устойчивостью к обрывам связи</div>
+  <div class="header"><h1>🗂 Yandex Saver</h1><span class="badge">v5.2 ✨</span></div>
+  <div class="hint">Сохранение файлов с отчетом об ошибках и загрузкой ссылок из файла</div>
 
   <div class="stage-indicator">
     <div class="stage active" id="stage-1">1. Авторизация</div>
@@ -89,7 +98,7 @@
     <div class="hint" style="margin-top:16px;background:#f8f9fa;padding:14px;border-radius:12px">
       <strong>ℹ️ Безопасность:</strong> Токен хранится только в памяти вкладки (<code>sessionStorage</code>).<br>
       Закройте вкладку — токен будет удалён автоматически.<br>
-      <strong>📱 Мобильный:</strong> Процесс продолжится после возврата в приложение, даже при временной потере связи.
+      <strong>📱 Мобильный:</strong> Процесс продолжится после возврата в приложение.
     </div>
   </div>
 
@@ -107,7 +116,15 @@
 
   <div id="step-links" class="step">
     <label>🔗 Вставьте текст со ссылками</label>
-    <textarea id="links-input" rows="6" placeholder="Пример:&#10;• https://disk.yandex.ru/d/AbCdEfGhIjK&#10;• https://yadi.sk/i/XyZ123"></textarea>
+    <textarea id="links-input" rows="5" placeholder="Пример:&#10;• https://disk.yandex.ru/d/AbCdEfGhIjK&#10;• https://yadi.sk/i/XyZ123"></textarea>
+    
+    <!-- 🔥 Загрузка файла со ссылками -->
+    <div class="file-upload-area" id="fileUploadArea">
+      <div style="margin-bottom:8px">📎 Или загрузите файл со ссылками (.txt, .md, .html, .json)</div>
+      <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,.json,.csv" style="display:none">
+      <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">📂 Выбрать файл</button>
+      <div class="hint" style="margin-top:8px;font-size:.85rem">Поддерживается перетаскивание файла в эту область</div>
+    </div>
     
     <div class="file-preview">
       <div class="item">🔍 <strong>Ссылок:</strong> <span id="links-count">0</span></div>
@@ -120,6 +137,10 @@
     
     <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
     <button id="btn-stop" class="secondary" style="display:none" onclick="stopProcess()">⏹ Остановить</button>
+    
+    <!-- 🔥 Кнопка скачивания отчета -->
+    <button id="btn-download-report" class="report-btn" style="display:none" onclick="downloadReport()">📥 Скачать отчет об ошибках</button>
+    
     <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
     <div id="progress-text" style="text-align:center;margin:8px 0;font-size:.95rem;color:var(--text-light)"></div>
   </div>
@@ -164,7 +185,10 @@
   let processedPublicPaths = new Set();
   let diskInfoCache = null;
   let wasRunningBeforeBlur = false;
-  let retryCounters = {}; // Счётчики повторных попыток по ключам
+  
+  // 🔥 Отслеживание ошибок для отчета
+  let failedItems = []; // { sourceUrl, filePath, fileName, errorCode, errorMessage }
+  let processedLinks = new Set(); // Для отчета: какие ссылки уже обработаны
 
   // ========== 🔄 УПРАВЛЕНИЕ ЭТАПАМИ ==========
   function updateStage(n) { for (let i=1;i<=4;i++){const el=document.getElementById(`stage-${i}`);el.classList.remove('active','done');if(i<n)el.classList.add('done');if(i===n)el.classList.add('active');} }
@@ -194,7 +218,17 @@
   async function verifyTokenAndProceed(token){updateStatus('✅ Проверка токена...');try{const test=await fetchWithRetry(`${API}/`,{headers:{'Authorization':`OAuth ${token}`}});if(test.ok){TOKEN=token;sessionStorage.setItem('ydisk_token',TOKEN);addLog('🔑 Токен принят');await onAuthSuccess();}else{addLog(`❌ Токен отклонён: ${test.status}`);logout();}}catch(e){addLog(`❌ Ошибка: ${e.message}`);logout();}}
 
   // ========== 🚀 ИНИЦИАЛИЗАЦИЯ ==========
-  window.addEventListener('DOMContentLoaded',async()=>{document.getElementById('authPopupBtn').onclick=startOAuthPopup;document.getElementById('browseFolderBtn').onclick=showFolderBrowser;document.getElementById('copyLogBtn').onclick=copyLog;document.getElementById('folder-input').oninput=updateTargetPreview;document.getElementById('links-input').oninput=updateLinksCount;updateConnectionStatus();if(TOKEN){addLog('🔍 Проверка токена...');await verifyTokenAndProceed(TOKEN);}else{addLog('⚠️ Требуется авторизация');updateStatus('Не авторизован');}});
+  window.addEventListener('DOMContentLoaded',async()=>{
+    document.getElementById('authPopupBtn').onclick=startOAuthPopup;
+    document.getElementById('browseFolderBtn').onclick=showFolderBrowser;
+    document.getElementById('copyLogBtn').onclick=copyLog;
+    document.getElementById('folder-input').oninput=updateTargetPreview;
+    document.getElementById('links-input').oninput=updateLinksCount;
+    setupFileUpload();
+    updateConnectionStatus();
+    if(TOKEN){addLog('🔍 Проверка токена...');await verifyTokenAndProceed(TOKEN);}
+    else{addLog('⚠️ Требуется авторизация');updateStatus('Не авторизован');}
+  });
   function updateTargetPreview(){const v=document.getElementById('folder-input').value.trim()||'/saved-materials';document.getElementById('target-preview').textContent=v.startsWith('/')?v:'/'+v;}
   function updateLinksCount(){const t=document.getElementById('links-input').value;document.getElementById('links-count').textContent=(t.match(/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi)||[]).length;}
   function copyLog(){const t=document.getElementById('log').innerText;if(!t.trim()){alert('📭 Лог пуст');return;}navigator.clipboard.writeText(t).then(()=>addLog('📋 Лог скопирован'));}
@@ -202,7 +236,7 @@
   function showMessage(type,text){const c=document.getElementById('auth-message');c.innerHTML='';const d=document.createElement('div');d.className=type==='error'?'error-box':type==='warning'?'warning-box':type==='info'?'info-box':'success-box';d.innerHTML=text;c.appendChild(d);setTimeout(()=>d.remove(),7000);}
   function updateStatus(msg){document.getElementById('current-status').innerText=msg;}
   function addLog(msg){const el=document.getElementById('log');el.style.display='block';el.textContent+=`[${new Date().toLocaleTimeString('ru-RU')}] ${msg}\n`;el.scrollTop=el.scrollHeight;console.log(`[YS] ${msg}`);}
-  function logout(){TOKEN='';sessionStorage.removeItem('ydisk_token');document.getElementById('user-block').style.display='none';document.getElementById('log').innerHTML='';document.getElementById('log').style.display='none';document.getElementById('copyLogBtn').style.display='none';document.getElementById('folder-browser').style.display='none';updateStatus('🔓 Вы вышли');updateStage(1);goToStep('step-auth');addLog('👋 Сессия завершена');if(popup&&!popup.closed)popup.close();if(popupTimer)clearTimeout(popupTimer);diskInfoCache=null;updateDiskInfoDisplay();}
+  function logout(){TOKEN='';sessionStorage.removeItem('ydisk_token');document.getElementById('user-block').style.display='none';document.getElementById('log').innerHTML='';document.getElementById('log').style.display='none';document.getElementById('copyLogBtn').style.display='none';document.getElementById('folder-browser').style.display='none';updateStatus('🔓 Вы вышли');updateStage(1);goToStep('step-auth');addLog('👋 Сессия завершена');if(popup&&!popup.closed)popup.close();if(popupTimer)clearTimeout(popupTimer);diskInfoCache=null;updateDiskInfoDisplay();failedItems=[];processedLinks.clear();}
 
   // ========== 💾 ИНФОРМАЦИЯ О ДИСКЕ ==========
   function formatBytes(bytes){if(bytes==null||bytes===0)return'0 Б';const k=1024;const sizes=['Б','КБ','МБ','ГБ','ТБ','ПБ'];const i=Math.floor(Math.log(bytes)/Math.log(k));return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+' '+sizes[i];}
@@ -218,7 +252,124 @@
   async function validateAndCreateFolder(){let input=document.getElementById('folder-input').value.trim();if(!input||input==='/'){input='/saved-materials';document.getElementById('folder-input').value=input;}TARGET_FOLDER=normalizePath(input);if(!TARGET_FOLDER.startsWith('/'))TARGET_FOLDER='/'+TARGET_FOLDER;addLog(`📁 Проверка: ${TARGET_FOLDER}`);updateStatus('🔍 Проверяю папку...');try{const check=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});if(check.status===404){addLog('📭 Создаю папку...');const cr=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(!cr.ok&&cr.status!==409)throw new Error(`Не удалось создать (${cr.status})`);addLog(cr.status===409?'⚠️ Создана параллельно':'✅ Создана');}else if(!check.ok)throw new Error(`Ошибка: ${check.status}`);else addLog('✅ Уже существует');document.getElementById('folder-status').innerHTML=`✅ Готово: <strong>${TARGET_FOLDER}</strong>`;document.getElementById('btn-next-links').style.display='block';document.getElementById('target-preview').textContent=TARGET_FOLDER;updateStatus(`📁 Папка готова`);updateStage(2);}catch(e){document.getElementById('folder-status').innerHTML=`❌ ${e.message}`;addLog(`❌ ${e.message}`);updateStatus(`❌ ${e.message}`);}}
 
   // ========== 🔗 ИЗВЛЕЧЕНИЕ ССЫЛОК ==========
-  function extractAllPublicLinks(text){const regex=/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi;const found=text.match(regex)||[];const unique=[...new Set(found.map(u=>{try{const url=new URL(u);return`${url.protocol}//${url.host}${url.pathname}`;}catch{return u;}}))];unique.forEach(u=>addLog(`🔗 Найдена: ${u}`));return unique;}
+  function extractAllPublicLinks(text) {
+    const regex = /https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi;
+    const found = text.match(regex) || [];
+    const unique = [...new Set(found.map(u => { 
+      try { const url = new URL(u); return `${url.protocol}//${url.host}${url.pathname}`; } 
+      catch { return u; } 
+    }))];
+    unique.forEach(u => addLog(`🔗 Найдена: ${u}`)); 
+    return unique;
+  }
+
+  // ========== 📎 ЗАГРУЗКА ФАЙЛА СО ССЫЛКАМИ ==========
+  function setupFileUpload() {
+    const area = document.getElementById('fileUploadArea');
+    const input = document.getElementById('fileInput');
+    
+    // Клик по области
+    area.addEventListener('click', (e) => {
+      if (e.target === area || e.target.classList.contains('hint')) input.click();
+    });
+    
+    // Выбор файла
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) await handleFileUpload(file);
+      input.value = '';
+    });
+    
+    // Drag & Drop
+    area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+    area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+    area.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      area.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) await handleFileUpload(file);
+    });
+  }
+  
+  async function handleFileUpload(file) {
+    addLog(`📎 Загружен файл: ${file.name}`);
+    try {
+      const text = await file.text();
+      const links = extractAllPublicLinks(text);
+      if (links.length === 0) {
+        showMessage('warning', `⚠️ В файле "${file.name}" не найдено ссылок на Яндекс.Диск`);
+        return;
+      }
+      const textarea = document.getElementById('links-input');
+      const existing = textarea.value.trim();
+      textarea.value = existing ? `${existing}\n${links.join('\n')}` : links.join('\n');
+      updateLinksCount();
+      showMessage('success', `✅ Извлечено ${links.length} ссылок из ${file.name}`);
+      addLog(`🔗 Из файла "${file.name}" извлечено ${links.length} ссылок`);
+    } catch (e) {
+      showMessage('error', `❌ Ошибка чтения файла: ${e.message}`);
+      addLog(`❌ Ошибка чтения файла: ${e.message}`);
+    }
+  }
+
+  // ========== 📤 СКАЧИВАНИЕ ОТЧЕТА ОБ ОШИБКАХ ==========
+  function downloadReport() {
+    if (failedItems.length === 0) {
+      showMessage('info', 'ℹ️ Нет ошибок для отчета');
+      return;
+    }
+    
+    const report = {
+      reportVersion: '1.0',
+      generatedAt: new Date().toISOString(),
+      targetFolder: TARGET_FOLDER,
+      failedItems: failedItems.map(item => ({
+        sourceUrl: item.sourceUrl,
+        filePath: item.filePath,
+        fileName: item.fileName,
+        errorCode: item.errorCode,
+        errorMessage: item.errorMessage
+      }))
+    };
+    
+    // Текстовый формат для повторной загрузки
+    const textReport = `# Yandex Saver Retry Report - ${new Date().toLocaleDateString('ru-RU')}
+# Target: ${TARGET_FOLDER}
+# Failed items: ${failedItems.length}
+# Generated: ${new Date().toLocaleString('ru-RU')}
+
+${failedItems.map(item => item.sourceUrl).join('\n')}
+`;
+    
+    // JSON для детальной информации
+    const jsonReport = JSON.stringify(report, null, 2);
+    
+    // Создаём оба файла
+    const blobTxt = new Blob([textReport], { type: 'text/plain' });
+    const blobJson = new Blob([jsonReport], { type: 'application/json' });
+    
+    const timestamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    
+    // Скачиваем TXT (для повторной загрузки)
+    downloadBlob(blobTxt, `yandex-saver-retry-${timestamp}.txt`);
+    
+    // Скачиваем JSON (для отладки)
+    setTimeout(() => downloadBlob(blobJson, `yandex-saver-report-${timestamp}.json`), 100);
+    
+    showMessage('success', `📥 Скачано 2 файла:<br>• retry-${timestamp}.txt — для повторной загрузки<br>• report-${timestamp}.json — детальный отчет`);
+    addLog(`📥 Отчет скачан: ${failedItems.length} ошибок`);
+  }
+  
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   // ========== 🛠️ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
   function normalizePath(p){if(!p)return'/';return p.replace(/\/+/g,'/').replace(/\/$/,'')||'/';}
@@ -231,27 +382,18 @@
     let lastError;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Проверяем, не отменён ли запрос
         if (options?.signal?.aborted) throw new Error('Запрос отменён');
-        
         const response = await fetch(url, options);
-        
-        // Успешный ответ или асинхронное выполнение
         if (response.ok || response.status === 202) return response;
-        
-        // 404 — пробуем ещё раз (возможно, временная ошибка)
         if (response.status === 404 && attempt < maxRetries) {
-          const delay = attempt * 1500; // 1.5с, 3с, 4.5с
+          const delay = attempt * 1500;
           addLog(`⚠️ Попытка ${attempt}/${maxRetries}: 404, повтор через ${delay/1000}с`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        
-        // Другие ошибки — возвращаем как есть
         return response;
       } catch (e) {
         lastError = e;
-        // Сетевые ошибки — пробуем ещё раз
         if (attempt < maxRetries && (e.name === 'TypeError' || e.message.includes('Failed to fetch') || !navigator.onLine)) {
           const delay = attempt * 2000;
           addLog(`⚠️ Попытка ${attempt}/${maxRetries}: ${e.message}, повтор через ${delay/1000}с`);
@@ -265,10 +407,9 @@
   }
 
   // ========== 💾 СОХРАНЕНИЕ ФАЙЛА С ПРОВЕРКОЙ ДУБЛЕЙ И ПОВТОРАМИ ==========
-  async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName) {
+  async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
     
-    // 🔍 Проверка дубля
     const fullPath = normalizePath(`${targetPath}/${fileName}`);
     if (await fileExistsAtPath(fullPath)) {
       addLog(`⏭ Уже существует: ${fileName}`);
@@ -284,7 +425,6 @@
       name: fileName
     });
     
-    // 🔁 Запрос с повторными попытками
     const response = await fetchWithRetry(`${API}/public/resources/save-to-disk?${params}`, {
       method: 'POST',
       headers: { 'Authorization': `OAuth ${TOKEN}` },
@@ -294,6 +434,14 @@
     if (response.status === 202) { addLog(`⏳ В очереди: ${fileName}`); return { saved: true }; }
     if (!response.ok) {
       const t = await response.text().catch(() => '');
+      // 🔥 Записываем ошибку в отчет
+      failedItems.push({
+        sourceUrl: sourceUrl,
+        filePath: filePathInPublic,
+        fileName: fileName,
+        errorCode: response.status,
+        errorMessage: t.slice(0, 200)
+      });
       throw new Error(`API ${response.status}: ${t.slice(0, 200)}`);
     }
     
@@ -306,7 +454,7 @@
   }
 
   // ========== 📂 ОБРАБОТКА ПАПОК ==========
-  async function processPublicFolder(publicKey, targetBasePath, publicFolderName) {
+  async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
     const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
     addLog(`📁 Обработка папки "${publicFolderName}" → ${rootTargetPath}`);
@@ -332,13 +480,18 @@
         if (item.type === 'file') {
           const dirInPublic = getDirFromPublicPath(item.path);
           const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-          const result = await savePublicFile(publicKey, item.path, fileTargetPath, item.name);
-          if (result?.skipped) addLog(`⏭ Пропущен дубль: ${item.name}`);
+          try {
+            const result = await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl);
+            if (result?.skipped) addLog(`⏭ Пропущен дубль: ${item.name}`);
+          } catch (e) {
+            addLog(`❌ Ошибка сохранения ${item.name}: ${e.message}`);
+            // Не прерываем цикл — продолжаем обработку остальных файлов
+          }
         } else if (item.type === 'dir') {
           await ensureFolderExists(itemTargetPath);
           addLog(`📁 Создана: ${itemTargetPath}`);
           const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-          await processSubFolderContents(subUrl, publicKey, rootTargetPath);
+          await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
         }
       }
       url = data._embedded?.next || data.next || null;
@@ -346,7 +499,7 @@
     }
   }
 
-  async function processSubFolderContents(url, publicKey, rootTargetPath) {
+  async function processSubFolderContents(url, publicKey, rootTargetPath, sourceUrl) {
     if (!isRunning) return;
     const resp = await fetchWithRetry(url, { signal: abortController?.signal });
     if (!resp.ok) throw new Error(`Не прочитать подпапку: ${resp.status}`);
@@ -361,35 +514,52 @@
       if (item.type === 'file') {
         const dirInPublic = getDirFromPublicPath(item.path);
         const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-        const result = await savePublicFile(publicKey, item.path, fileTargetPath, item.name);
-        if (result?.skipped) addLog(`⏭ Пропущен дубль: ${item.name}`);
+        try {
+          const result = await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl);
+          if (result?.skipped) addLog(`⏭ Пропущен дубль: ${item.name}`);
+        } catch (e) {
+          addLog(`❌ Ошибка сохранения ${item.name}: ${e.message}`);
+        }
       } else if (item.type === 'dir') {
         const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
         const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
         await ensureFolderExists(itemTargetPath);
         addLog(`📁 Создана: ${itemTargetPath}`);
         const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-        await processSubFolderContents(subUrl, publicKey, rootTargetPath);
+        await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
       }
     }
     const nextUrl = data._embedded?.next || data.next || null;
-    if (nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath);
+    if (nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath, sourceUrl);
   }
 
   // ========== 🔗 ОБРАБОТКА ОДНОЙ ССЫЛКИ ==========
   async function processPublicLink(publicUrl, targetBasePath) {
+    // 🔥 Отмечаем ссылку как обработанную для отчета
+    processedLinks.add(publicUrl);
+    
     const metaResp = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, { signal: abortController?.signal });
-    if (!metaResp.ok) throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
+    if (!metaResp.ok) {
+      // 🔥 Записываем ошибку доступа к ссылке
+      failedItems.push({
+        sourceUrl: publicUrl,
+        filePath: '/',
+        fileName: '(папка)',
+        errorCode: metaResp.status,
+        errorMessage: 'Недоступна публичная ссылка'
+      });
+      throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
+    }
     const meta = await metaResp.json();
     
     if (meta.type === 'file') {
       addLog(`📄 Файл: ${meta.name}`);
-      const result = await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name);
+      const result = await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name, publicUrl);
       return result?.skipped ? { skipped: true } : { saved: true };
     } else if (meta.type === 'dir' || meta._embedded?.items) {
       const publicFolderName = meta.name || 'Без имени';
       addLog(`📁 Папка: "${publicFolderName}"`);
-      await processPublicFolder(publicUrl, targetBasePath, publicFolderName);
+      await processPublicFolder(publicUrl, targetBasePath, publicFolderName, publicUrl);
       return { saved: true };
     } else throw new Error(`Неизвестный тип: ${meta.type}`);
   }
@@ -400,6 +570,9 @@
     updateStage(4);
     const links = extractAllPublicLinks(raw); if (!links.length) return alert('❌ Нет корректных ссылок');
     if (!TARGET_FOLDER) { await validateAndCreateFolder(); if (!TARGET_FOLDER) return alert('❌ Укажите папку'); }
+    
+    // 🔥 Сброс ошибок перед новым запуском
+    failedItems = [];
     
     await updateDiskInfoDisplay();
     
@@ -441,6 +614,7 @@
     isRunning = true; abortController = new AbortController(); processedPublicPaths.clear();
     document.getElementById('btn-start').disabled = true; document.getElementById('btn-stop').style.display = 'block';
     document.getElementById('progress-fill').style.width = '0%'; document.getElementById('progress-text').innerText = '';
+    document.getElementById('btn-download-report').style.display = 'none'; // Скрыть кнопку отчета до завершения
     
     addLog(`🚀 Старт: ${links.length} ссылок | 📁 ${TARGET_FOLDER}`); updateStatus(`⏳ 1/${links.length}...`);
     
@@ -465,13 +639,19 @@
     document.getElementById('progress-fill').style.width = '100%'; document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${links.length}`;
     document.getElementById('btn-start').disabled = false; document.getElementById('btn-stop').style.display = 'none'; isRunning = false;
     
+    // 🔥 Показываем кнопку отчета если есть ошибки
+    if (failedItems.length > 0) {
+      document.getElementById('btn-download-report').style.display = 'block';
+    }
+    
     let summary = `✅ Готово: ${success} сохранено`;
     if (skipped > 0) summary += `, ${skipped} пропущено (дубли)`;
     if (errors > 0) summary += `, ${errors} ошибок`;
+    if (failedItems.length > 0) summary += ` (см. отчет)`;
     updateStatus(summary);
-    addLog(`🎉 Завершено: ${success} сохранено, ${skipped} дублей пропущено, ${errors} ошибок`);
+    addLog(`🎉 Завершено: ${success} сохранено, ${skipped} дублей пропущено, ${errors} ошибок, ${failedItems.length} записано в отчет`);
     
-    if (errors === 0 && skipped === 0) showMessage('success', summary);
+    if (errors === 0 && skipped === 0 && failedItems.length === 0) showMessage('success', summary);
     else if (errors === 0) showMessage('info', summary);
     else showMessage('warning', summary);
   }

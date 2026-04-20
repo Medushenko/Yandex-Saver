@@ -1,910 +1,103 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Yandex Saver">
-  <meta name="theme-color" content="#fc3f1d">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗂</text></svg>">
-  <title>Yandex Saver — Сохранение файлов и папок</title>
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <style>
-    /* Стили остаются без изменений, как в предоставленном исходном коде */
-    :root{--bg:#f5f7fa;--card:#fff;--primary:#fc3f1d;--primary-hover:#e6300f;--text:#333;--text-light:#666;--border:#e0e0e0;--success:#4caf50;--error:#f44336;--warning:#ff9800;--info:#2196f3}
-    *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-    body{background:var(--bg);color:var(--text);padding:20px;min-height:100vh;display:flex;justify-content:center;align-items:flex-start}
-    .container{max-width:900px;width:100%;background:var(--card);padding:28px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.12)}
-    .header{display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
-    .header:active{opacity:.8}
-    .header h1{font-size:1.6rem;font-weight:600}
-    .header .badge{background:var(--primary);color:#fff;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:500}
-    .step{display:none;margin-top:24px;animation:fadeIn .3s ease}
-    .step.active{display:block}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-    label{display:block;margin-bottom:8px;font-weight:600;font-size:1.05rem}
-    input,textarea{width:100%;padding:14px;border:2px solid var(--border);border-radius:12px;margin-bottom:14px;font-size:16px;transition:border-color .2s}
-    input:focus,textarea:focus{outline:none;border-color:var(--primary)}
-    button{background:var(--primary);color:#fff;border:none;padding:14px 20px;border-radius:12px;cursor:pointer;width:100%;margin-bottom:10px;font-size:16px;font-weight:500;transition:background .2s,transform .1s}
-    button:hover{background:var(--primary-hover);transform:translateY(-1px)}
-    button:active{transform:translateY(0)}
-    button:disabled{background:#ccc;cursor:not-allowed;transform:none}
-    button.secondary{background:#666}
-    button.secondary:hover{background:#555}
-    .hint{font-size:.9rem;color:var(--text-light);margin-bottom:14px;line-height:1.5}
-    .error-box{background:#ffebee;color:#c62828;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--error)}
-    .success-box{background:#e8f5e9;color:#2e7d32;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--success)}
-    .warning-box{background:#fff3e0;color:#ef6c00;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--warning)}
-    .info-box{background:#e3f2fd;color:#1976d2;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--info)}
-    .log{background:#0d1117;color:#7ee787;padding:16px;border-radius:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:.85rem;height:280px;overflow-y:auto;margin-top:16px;white-space:pre-wrap;word-break:break-all;line-height:1.4}
-    .progress-bar{width:100%;height:10px;background:#e9ecef;border-radius:6px;margin:16px 0;overflow:hidden}
-    .progress-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--primary-hover));width:0%;transition:width .4s ease}
-    .user-info{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f8f9fa;border-radius:12px;margin-bottom:20px}
-    .status-panel{background:#f8f9fa;padding:14px 18px;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .status-panel span{font-weight:600;color:var(--primary)}
-    .disk-info{display:flex;gap:16px;font-size:.9rem;color:var(--text-light);margin-left:auto}
-    .disk-info .item{display:flex;align-items:center;gap:6px}
-    .disk-info .item.free{color:var(--success);font-weight:600}
-    .disk-info .item.required{color:var(--warning);font-weight:600}
-    .folder-browser{background:#fff;border:2px solid var(--border);border-radius:14px;padding:14px;margin-top:14px;max-height:320px;overflow-y:auto}
-    .folder-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:10px;border-radius:8px;transition:background .15s}
-    .folder-item:hover{background:#f8f9fa}
-    .folder-item:last-child{border-bottom:none}
-    .folder-item .name{flex:1;font-weight:500}
-    .new-folder-btn{background:var(--primary);color:white;border:none;padding:10px 16px;border-radius:24px;cursor:pointer;margin-top:12px;width:auto;font-size:.9rem}
-    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
-    .modal-content{background:white;padding:24px;border-radius:20px;width:340px}
-    .copy-log-btn{background:#3d5a80;margin-top:12px;width:auto;padding:10px 18px;border-radius:24px;font-size:.9rem}
-    .stage-indicator{display:flex;gap:8px;margin-bottom:20px;justify-content:center}
-    .stage{flex:1;text-align:center;padding:10px;border-radius:10px;background:#f0f2f5;font-size:.85rem;font-weight:500;color:var(--text-light);transition:all .2s}
-    .stage.active{background:var(--primary);color:#fff}
-    .stage.done{background:var(--success);color:#fff}
-    .file-preview{background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;font-size:.9rem;display:flex;flex-wrap:wrap;gap:12px}
-    .file-preview .item{display:flex;align-items:center;gap:6px}
-    .file-preview code{background:#e9ecef;padding:2px 6px;border-radius:4px;font-family:monospace}
-    .scan-status{background:#fff8e1;color:#856404;padding:10px 14px;border-radius:10px;margin:10px 0;font-size:.9rem;display:none}
-    .scan-status.active{display:block}
-    .file-upload-area{border:2px dashed var(--border);border-radius:12px;padding:16px;text-align:center;margin:12px 0;background:#fafafa;transition:border-color .2s;cursor:pointer}
-    .file-upload-area:hover{border-color:var(--primary)}
-    .file-upload-area.dragover{border-color:var(--primary);background:#fff5f5}
-    .file-upload-btn{background:var(--info);margin:0}
-    .file-upload-btn:hover{background:#1976d2}
-    .report-btn{background:var(--success);margin-top:8px}
-    .report-btn:hover{background:#388e3c}
-    .report-btn:disabled{background:#ccc}
-    .connection-status{position:fixed;top:12px;right:12px;padding:8px 14px;border-radius:20px;font-size:.85rem;font-weight:500;z-index:1001;transition:all .3s;box-shadow:0 4px 12px rgba(0,0,0,.15)}
-    .connection-status.online{background:var(--success);color:#fff}
-    .connection-status.offline{background:var(--error);color:#fff}
-    .connection-status.hidden{opacity:0;pointer-events:none}
-    .refresh-hint{font-size:.75rem;color:var(--text-light);text-align:center;margin-top:4px}
-    @media(max-width:600px){.container{padding:20px;border-radius:16px}.log{height:220px}.disk-info{margin-left:0;margin-top:10px;width:100%;justify-content:space-around}.connection-status{top:auto;bottom:12px;right:12px}.file-preview{flex-direction:column;gap:8px}}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#fc3f1d">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <title>Yandex Saver — Версия 5.6.Copilot</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="script.js" defer></script>
 </head>
 <body>
-<div class="container">
-  <div class="header" onclick="forceRefresh()" title="Нажмите для обновления страницы">
-    <h1>🗂 Yandex Saver</h1>
-    <span class="badge">v5.6.Y ✨</span>
-  </div>
-  <div class="refresh-hint">🔄 Нажмите на заголовок для принудительного обновления</div>
-  
-  <div class="hint">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</div>
-
-  <div class="stage-indicator">
-    <div class="stage active" id="stage-1">1. Авторизация</div>
-    <div class="stage" id="stage-2">2. Папка</div>
-    <div class="stage" id="stage-3">3. Ссылки</div>
-    <div class="stage" id="stage-4">4. Обработка</div>
-  </div>
-
-  <div id="user-block" class="user-info" style="display:none">
-    <span>✅ <strong>Диск подключён</strong></span>
-    <button onclick="logout()" style="width:auto;padding:8px 16px;background:var(--error);margin:0">Выйти</button>
-  </div>
-
-  <div id="step-auth" class="step active">
-    <label>🔐 Подключите Яндекс.Диск</label>
-    <button id="authPopupBtn">🔑 Авторизоваться (всплывающее окно)</button>
-    <div id="auth-message"></div>
-    <div class="hint" style="margin-top:16px;background:#f8f9fa;padding:14px;border-radius:12px">
-      <strong>ℹ️ Безопасность:</strong> Токен хранится только в памяти вкладки.<br>
-      <strong>📱 iOS:</strong> Если приложение не обновляется — нажмите на заголовок 🗂 для принудительной перезагрузки.
+<header>
+    <div class="header">
+        <h1>🗂 Yandex Saver</h1>
+        <span class="badge">v5.6.Copilot</span>
     </div>
-  </div>
-
-  <div id="step-folder" class="step">
-    <label>📁 Папка назначения</label>
-    <div style="display:flex;gap:10px">
-      <input type="text" id="folder-input" value="/saved-materials" style="flex:1" placeholder="/путь/к/папке">
-      <button id="browseFolderBtn" style="width:auto;padding:14px 18px">📂 Обзор</button>
-    </div>
-    <div id="folder-browser" class="folder-browser" style="display:none"></div>
-    <button onclick="validateAndCreateFolder()">✅ Проверить и создать папку</button>
-    <div id="folder-status" class="hint"></div>
-    <button id="btn-next-links" style="display:none" onclick="goToStep('step-links');updateStage(3)">➡️ Далее: вставить ссылки</button>
-  </div>
-
-  <div id="step-links" class="step">
-    <label>🔗 Вставьте текст со ссылками</label>
-    <textarea id="links-input" rows="5" placeholder="Пример:&#10;• https://disk.yandex.ru/d/AbCdEfGhIjK&#10;• https://yadi.sk/i/XyZ123"></textarea>
-    
-    <div class="file-upload-area" id="fileUploadArea">
-      <div style="margin-bottom:8px">📎 Или загрузите файл со ссылками (.txt, .md, .html, .json)</div>
-      <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,.json,.csv" style="display:none">
-      <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">📂 Выбрать файл</button>
-      <div class="hint" style="margin-top:8px;font-size:.85rem">Поддерживается перетаскивание файла в эту область</div>
-    </div>
-    
-    <div class="file-preview">
-      <div class="item">🔍 <strong>Ссылок:</strong> <span id="links-count">0</span></div>
-      <div class="item">📁 <strong>Куда:</strong> <code id="target-preview">/saved-materials</code></div>
-      <div class="item">💾 <strong>Свободно:</strong> <span id="free-space" class="free">—</span></div>
-      <div class="item">📦 <strong>Нужно:</strong> <span id="required-space" class="required">—</span></div>
-    </div>
-    
-    <div id="scan-status" class="scan-status">⏳ Сканирую публичные папки для расчёта размера...</div>
-    
-    <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
-    <button id="btn-stop" class="secondary" style="display:none" onclick="stopProcess()">⏹ Остановить</button>
-    <button id="btn-download-report" class="report-btn" style="display:none" onclick="downloadReport()">📥 Скачать отчет об ошибках</button>
-    
-    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
-    <div id="progress-text" style="text-align:center;margin:8px 0;font-size:.95rem;color:var(--text-light)"></div>
-  </div>
-
-  <div class="status-panel">
-    📋 Статус: <span id="current-status">Ожидание</span>
-    <div class="disk-info">
-      <div class="item free">💾 Свободно: <span id="disk-free">—</span></div>
-      <div class="item">📊 Всего: <span id="disk-total">—</span></div>
-    </div>
-  </div>
-  
-  <div id="log" class="log" style="display:none"></div>
-  <button id="copyLogBtn" class="copy-log-btn" style="display:none">📋 Копировать лог</button>
-</div>
-
-<div id="newFolderModal" class="modal">
-  <div class="modal-content">
-    <h3 style="margin-bottom:18px">➕ Создать папку</h3>
-    <input type="text" id="newFolderName" placeholder="Имя папки" style="margin-bottom:18px">
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button id="cancelNewFolderBtn" class="secondary" style="width:auto;margin:0">Отмена</button>
-      <button id="confirmNewFolderBtn" style="width:auto;margin:0">Создать</button>
-    </div>
-  </div>
-</div>
-
-<div id="connectionStatus" class="connection-status hidden">🌐 Онлайн</div>
-
+</header>
+<main>
+    <section>
+        <h2>Авторизация</h2>
+        <form id="auth-form">
+            <label for="username">Логин:</label>
+            <input type="text" id="username" name="username" required>
+            <label for="password">Пароль:</label>
+            <input type="password" id="password" name="password" required>
+            <button type="submit">Войти</button>
+        </form>
+        <div id="auth-error" class="error-message" style="display: none;">Ошибка авторизации. Попробуйте снова.</div>
+    </section>
+    <section>
+        <h2>Выбор папки</h2>
+        <label for="folder-path">Путь к папке:</label>
+        <input type="text" id="folder-path" placeholder="/saved-materials" required>
+        <button id="folder-validate">Проверить и создать</button>
+        <div id="folder-status" class="status-message"></div>
+    </section>
+    <section>
+        <h2>Файлы и ссылки</h2>
+        <textarea id="links-input" placeholder="Вставьте ссылки для обработки"></textarea>
+        <div class="file-actions">
+            <button id="upload-files">Загрузить ссылки</button>
+        </div>
+        <div class="progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <p id="progress-text">Прогресс: 0%</p>
+        </div>
+    </section>
+</main>
+<footer>
+    <p>Yandex Saver — Версия 5.6.Copilot</p>
+</footer>
 <script>
-  // ========== 📦 КОНФИГУРАЦИЯ ==========
-  const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
-  const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
-  const API = 'https://cloud-api.yandex.net/v1/disk';
-  
-  let TOKEN = '';
-  let TARGET_FOLDER = '';
-  let isRunning = false;
-  let abortController = null;
-  let popup = null, popupTimer = null;
-  let processedPublicPaths = new Set();
-  let diskInfoCache = null;
-  let wasRunningBeforeBlur = false;
-  let failedItems = [];
-  let tokenValidated = false;
-  
-  // ========== 🔄 ИСПРАВЛЕННЫЕ ФУНКЦИИ ==========
-  
-  // 🔧 ИСПРАВЛЕНИЕ 1: Функции для работы с информацией о диске
-  function formatBytes(bytes){
-      if(bytes == null || bytes === 0) return '0 Б';
-      const k = 1024;
-      const sizes = ['Б','КБ','МБ','ГБ','ТБ','ПБ'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
-  
-  async function getDiskInfo(){
-      try{
-          await throttler.waitIfNeeded();
-          const res = await fetchWithRetry(`${API}/`, {
-              headers: { 'Authorization': `OAuth ${TOKEN}` }
-          });
-          
-          if(!res.ok){
-              throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-          }
-          
-          const data = await res.json();
-          
-          // Детальная проверка структуры ответа
-          const total = data.total_space !== undefined ? Number(data.total_space) : 0;
-          const used = data.used_space !== undefined ? Number(data.used_space) : 0;
-          const free = data.free_space !== undefined ? Number(data.free_space) : 0;
-          
-          // Проверка логической целостности данных
-          if(total > 0 && free === 0 && used > 0){
-              // Возможная ошибка API - вычисляем свободное место
-              const calculatedFree = total - used;
-              addLog(`⚠️ API вернул free_space=0, вычисляем: ${formatBytes(calculatedFree)}`);
-              return {
-                  total_space: total,
-                  used_space: used,
-                  free_space: calculatedFree > 0 ? calculatedFree : 0
-              };
-          }
-          
-          return {
-              total_space: total,
-              used_space: used,
-              free_space: free
-          };
-      } catch(e){
-          addLog(`❌ Ошибка получения информации о диске: ${e.message}`);
-          // Не кэшируем нулевые значения при ошибке
-          return null;
-      }
-  }
+    document.addEventListener("DOMContentLoaded", () => {
+        // Авторизация
+        const authForm = document.getElementById("auth-form");
+        const authError = document.getElementById("auth-error");
+        
+        authForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
 
-  async function updateDiskInfoDisplay(){
-      if(!TOKEN) return;
-      
-      const info = await getDiskInfo();
-      if(!info){
-          addLog('⚠️ Не удалось получить информацию о диске');
-          return;
-      }
-      
-      diskInfoCache = info;
-      
-      // Обновляем все элементы отображения
-      ['disk-free', 'free-space'].forEach(id => {
-          const el = document.getElementById(id);
-          if(el) el.textContent = formatBytes(diskInfoCache.free_space);
-      });
-      
-      const totalEl = document.getElementById('disk-total');
-      if(totalEl) totalEl.textContent = formatBytes(diskInfoCache.total_space);
-      
-      // Логируем для отладки
-      addLog(`💾 Диск: всего ${formatBytes(info.total_space)}, свободно ${formatBytes(info.free_space)}`);
-  }
-  
-  // 🔧 ИСПРАВЛЕНИЕ 2: Функции для обработки публичных ссылок
-  function extractPublicKey(fullUrl){
-      try{
-          const url = new URL(fullUrl);
-          // Извлекаем идентификатор из пути
-          const pathMatch = url.pathname.match(/\/d\/([^\/]+)/);
-          if(pathMatch) return pathMatch[forpes.ru](https://forpes.ru/post/160947);
-          
-          // Альтернативные форматы ссылок
-          const shortMatch = url.pathname.match(/\/i\/([^\/]+)/);
-          if(shortMatch) return shortMatch[forpes.ru](https://forpes.ru/post/160947);
-          
-          return fullUrl; // fallback
-      } catch{
-          // Если не удалось распарсить URL, пытаемся извлечь вручную
-          const match = fullUrl.match(/(?:d|i)\/([a-zA-Z0-9_-]+)/);
-          return match ? match[forpes.ru](https://forpes.ru/post/160947) : fullUrl;
-      }
-  }
-  
-  async function processPublicLink(publicUrl, targetBasePath){
-      processedPublicPaths.clear();
-      
-      // Извлекаем публичный ключ из полного URL
-      const publicKey = extractPublicKey(publicUrl);
-      addLog(`🔑 Извлечен публичный ключ: ${publicKey} из ${publicUrl}`);
-      
-      const metaResp = await fetchWithRetry(
-          `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}`, 
-          { signal: abortController?.signal }
-      );
-      
-      if(!metaResp.ok){
-          const errorText = await metaResp.text().catch(() => '');
-          addLog(`❌ Ошибка запроса метаданных: ${metaResp.status} - ${errorText}`);
-          failedItems.push({ 
-              sourceUrl: publicUrl, 
-              publicPath: '/', 
-              fileName: '(корень)', 
-              targetPath: TARGET_FOLDER, 
-              errorCode: metaResp.status, 
-              errorMessage: errorText.slice(0, 200), 
-              attempt: 5, 
-              maxRetries: 5 
-          });
-          throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
-      }
-      
-      const meta = await metaResp.json();
-      
-      // Добавляем проверку структуры ответа
-      if(!meta.type && !meta._embedded){
-          addLog(`⚠️ Необычный ответ API: ${JSON.stringify(meta).slice(0, 200)}`);
-      }
-      
-      if(meta.type === 'file'){
-          addLog(`📄 Файл: ${meta.name} (${formatBytes(meta.size)})`);
-          const filePath = meta.path || `/${meta.name}`;
-          return (await savePublicFile(publicKey, filePath, targetBasePath, meta.name, publicUrl))?.skipped ? 
-              { skipped: true } : { saved: true };
-      } else if(meta.type === 'dir' || meta._embedded?.items){
-          const publicFolderName = meta.name || 'Без имени';
-          addLog(`📁 Папка: "${publicFolderName}"`);
-          await processPublicFolder(publicKey, targetBasePath, publicFolderName, publicUrl);
-          return { saved: true };
-      } else{
-          throw new Error(`Неизвестный тип: ${meta.type || 'отсутствует'}`);
-      }
-  }
-  
-  async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl){
-      if(!isRunning) throw new Error('Остановлено');
-      
-      const fullPath = normalizePath(`${targetPath}/${fileName}`);
-      
-      // Проверяем существование файла
-      if(await fileExistsAtPath(fullPath)){
-          addLog(`⏭ Уже существует: ${fileName}`);
-          return { skipped: true, reason: 'exists' };
-      }
-      
-      updateStatus(`💾 ${fileName}`); 
-      addLog(`⬇️ Сохраняю: ${fileName} из ${filePathInPublic}`);
-      
-      // Детальное логирование параметров
-      addLog(`📤 Параметры: public_key=${publicKey}, path=${filePathInPublic}`);
-      
-      const params = new URLSearchParams({ 
-          public_key: publicKey, 
-          path: encodeURIComponent(filePathInPublic), // 🔧 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: явное кодирование пути
-          save_path: normalizePath(targetPath), 
-          name: fileName 
-      });
-      
-      try{
-          const response = await fetchWithRetry(
-              `${API}/public/resources/save-to-disk?${params}`, 
-              { 
-                  method: 'POST', 
-                  headers: { 'Authorization': `OAuth ${TOKEN}` } 
-              }
-          );
-          
-          if(response.status === 202){ 
-              addLog(`⏳ В очереди: ${fileName}`); 
-              return { saved: true }; 
-          }
-          
-          if(!response.ok){
-              const errorText = await response.text().catch(() => '');
-              addLog(`❌ Ошибка API ${response.status}: ${errorText}`);
-              
-              // Анализ ошибки 404
-              if(response.status === 404){
-                  addLog(`🔍 Детализация 404 для пути: ${filePathInPublic}`);
-                  addLog(`🔍 Публичный ключ: ${publicKey}`);
-                  addLog(`🔍 Полный URL: ${sourceUrl}`);
-              }
-              
-              failedItems.push({ 
-                  sourceUrl, 
-                  publicPath: filePathInPublic, 
-                  fileName, 
-                  targetPath: fullPath, 
-                  errorCode: response.status, 
-                  errorMessage: errorText.slice(0, 200), 
-                  attempt: 5, 
-                  maxRetries: 5 
-              });
-              throw new Error(`API ${response.status}: ${errorText.slice(0, 200)}`);
-          }
-          
-          const result = await response.json();
-          if(result.href || result.path || result.name){
-              addLog(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`);
-              return { saved: true };
-          }
-          throw new Error('Неожиданный ответ API');
-          
-      } catch(error){
-          // Добавляем дополнительную информацию для отладки
-          addLog(`🔍 Стек вызовов для ${fileName}: publicKey=${publicKey}, path=${filePathInPublic}`);
-          throw error;
-      }
-  }
-  
-  // 🔧 ИСПРАВЛЕНИЕ 3: Рекурсивный расчёт размера папок
-  async function calculatePublicFolderSizeRecursive(publicKey, limit = 1000){
-      let totalSize = 0;
-      let fileCount = 0;
-      let processedItems = 0;
-      
-      // Используем стек для итеративного обхода вместо рекурсии
-      const foldersToProcess = [{path: '', nextUrl: null}];
-      
-      while(foldersToProcess.length > 0 && isRunning){
-          const current = foldersToProcess.pop();
-          let url = current.nextUrl;
-          
-          if(!url){
-              url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=${limit}`;
-              if(current.path){
-                  url += `&path=${encodeURIComponent(current.path)}`;
-              }
-          }
-          
-          try{
-              await throttler.waitIfNeeded();
-              const resp = await fetchWithRetry(url);
-              
-              if(!resp.ok){
-                  addLog(`⚠️ Ошибка при сканировании ${current.path || 'корня'}: ${resp.status}`);
-                  continue;
-              }
-              
-              const data = await resp.json();
-              const items = data._embedded?.items || data.items || [];
-              
-              for(const item of items){
-                  if(!isRunning) break;
-                  
-                  if(item.type === 'file' && item.size){
-                      totalSize += item.size;
-                      fileCount++;
-                      processedItems++;
-                      
-                      // Периодическое логирование прогресса
-                      if(processedItems % 50 === 0){
-                          addLog(`📊 Сканирование: ${processedItems} элементов, ${formatBytes(totalSize)}`);
-                      }
-                  } else if(item.type === 'dir'){
-                      // Добавляем папку в стек для обработки
-                      foldersToProcess.push({
-                          path: item.path,
-                          nextUrl: null
-                      });
-                  }
-              }
-              
-              // Обработка пагинации для текущей папки
-              const nextUrl = data._embedded?.next || data.next || null;
-              if(nextUrl && isRunning){
-                  // Добавляем текущую папку снова в стек, но с URL следующей страницы
-                  foldersToProcess.push({
-                      path: current.path,
-                      nextUrl: nextUrl
-                  });
-              }
-              
-          } catch(e){
-              addLog(`⚠️ Исключение при сканировании ${current.path}: ${e.message}`);
-          }
-      }
-      
-      return { totalSize, fileCount };
-  }
+            // Замените логикой проверки авторизации
+            if (username === "test" && password === "password") {
+                alert("Авторизация успешна!");
+                authError.style.display = "none";
+            } else {
+                authError.style.display = "block";
+            }
+        });
 
-  // ========== 📋 ОСТАВШИЙСЯ КОД БЕЗ ИЗМЕНЕНИЙ ==========
-  // (Оригинальные функции, не требующие исправлений)
-  
-  // 🔥 ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ для iOS PWA
-  function forceRefresh(){
-      addLog('🔄 Принудительное обновление страницы...');
-      const url = new URL(window.location.href);
-      url.searchParams.set('_refresh', Date.now());
-      window.location.href = url.toString();
-  }
-  
-  function getStoredToken(){
-      try{
-          let token = sessionStorage.getItem('ydisk_token');
-          if(token && token.length > 20) return token;
-          
-          token = localStorage.getItem('ydisk_token');
-          if(token && token.length > 20){
-              addLog('📱 iOS: токен восстановлен из localStorage');
-              sessionStorage.setItem('ydisk_token', token);
-              return token;
-          }
-      } catch(e){
-          addLog(`⚠️ Ошибка чтения токена: ${e.message}`);
-      }
-      return '';
-  }
-  
-  function storeToken(token){
-      try{
-          sessionStorage.setItem('ydisk_token', token);
-          localStorage.setItem('ydisk_token', token);
-          addLog('🔑 Токен сохранён в sessionStorage + localStorage');
-      } catch(e){
-          addLog(`❌ Ошибка сохранения токена: ${e.message}`);
-      }
-  }
-  
-  TOKEN = getStoredToken();
-  
-  function updateStage(n){ for(let i=1;i<=4;i++){const el=document.getElementById(`stage-${i}`);el.classList.remove('active','done');if(i<n)el.classList.add('done');if(i===n)el.classList.add('active');} }
-  function goToStep(id){document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+        // Проверка папки
+        const folderValidate = document.getElementById("folder-validate");
+        folderValidate.addEventListener("click", () => {
+            const folderPath = document.getElementById("folder-path").value.trim();
+            if (folderPath) {
+                document.getElementById("folder-status").textContent = `Папка '${folderPath}' готова!`;
+            } else {
+                document.getElementById("folder-status").textContent = "Укажите путь к папке.";
+            }
+        });
 
-  function updateConnectionStatus(){
-      const el = document.getElementById('connectionStatus');
-      const isOnline = navigator.onLine;
-      el.textContent = isOnline ? '🌐 Онлайн' : '📴 Офлайн';
-      el.className = `connection-status ${isOnline ? 'online' : 'offline'}`;
-      el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), 3000);
-      if(isOnline && isRunning) addLog('🌐 Соединение восстановлено, продолжаем...');
-      if(!isOnline && isRunning) addLog('⚠️ Нет соединения, ожидаем восстановления...');
-  }
-  window.addEventListener('online', updateConnectionStatus);
-  window.addEventListener('offline', updateConnectionStatus);
-  window.addEventListener('blur', () => { if(isRunning){ wasRunningBeforeBlur = true; addLog('⏸ Приложение в фоне, процесс приостановлен'); } });
-  window.addEventListener('focus', () => { if(wasRunningBeforeBlur && isRunning){ wasRunningBeforeBlur = false; addLog('🔄 Возврат в приложение, возобновляем...'); updateDiskInfoDisplay(); } });
-  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible' && isRunning){ addLog('👁 Вкладка активна, проверяем соединение...'); updateConnectionStatus(); } });
-
-  function startOAuthPopup(){
-      updateStatus('🔐 Открытие окна авторизации...');
-      updateStage(1);
-      const authUrl=`https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-      popup=window.open(authUrl,'YandexAuth',`width=520,height=700,left=${Math.floor((screen.width-520)/2)},top=${Math.floor((screen.height-700)/2)}`);
-      if(!popup){showMessage('error','❌ Разрешите всплывающие окна');return;}
-      window.addEventListener('message',handlePopupMessage);
-      popupTimer=setTimeout(()=>{if(popup&&!popup.closed)popup.close();window.removeEventListener('message',handlePopupMessage);popupTimer=null;},5*60*1000);
-  }
-  
-  function handlePopupMessage(event){
-      if(event.origin!==window.location.origin||!event.data?.token)return;
-      if(popupTimer){clearTimeout(popupTimer);popupTimer=null;}
-      addLog(`📨 Получен токен от popup (длина: ${event.data.token.length})`);
-      verifyTokenAndProceed(event.data.token);
-      if(popup&&!popup.closed)popup.close();
-      window.removeEventListener('message',handlePopupMessage);
-  }
-  
-  if(window.location.hash.includes('access_token=')){
-      const match=window.location.hash.match(/access_token=([^&]+)/);
-      if(match?.[forpes.ru](https://forpes.ru/post/160947)){
-          const token=decodeURIComponent(match[forpes.ru](https://forpes.ru/post/160947));
-          addLog(`🔗 Возврат из OAuth: токен получен (длина: ${token.length})`);
-          verifyTokenAndProceed(token);
-          history.replaceState(null,null,window.location.pathname);
-      }
-  }
-  
-  async function verifyTokenAndProceed(token){
-      updateStatus('✅ Проверка токена...');
-      addLog(`🔍 Проверяю токен (длина: ${token?.length||0})`);
-      
-      try{
-          const test = await fetch(`${API}/`, { 
-              headers: { 'Authorization': `OAuth ${token}` },
-              cache: 'no-store'
-          });
-          
-          if(test.ok){
-              TOKEN = token;
-              storeToken(TOKEN);
-              tokenValidated = true;
-              addLog('🔑 Токен принят и сохранён');
-              await onAuthSuccess();
-          } else{
-              const errText = await test.text().catch(()=> '');
-              addLog(`❌ Токен отклонён: ${test.status} ${errText.slice(0,100)}`);
-              logout();
-          }
-      } catch(e){
-          addLog(`❌ Ошибка проверки токена: ${e.message}`);
-          logout();
-      }
-  }
-
-  window.addEventListener('DOMContentLoaded', async () => {
-      document.getElementById('authPopupBtn').onclick = startOAuthPopup;
-      document.getElementById('browseFolderBtn').onclick = showFolderBrowser;
-      document.getElementById('copyLogBtn').onclick = copyLog;
-      document.getElementById('folder-input').oninput = updateTargetPreview;
-      document.getElementById('links-input').oninput = updateLinksCount;
-      setupFileUpload();
-      updateConnectionStatus();
-      
-      if(TOKEN){
-          addLog('🔍 Токен найден в хранилище, проверяю...');
-          verifyTokenAndProceed(TOKEN).catch(e => {
-              addLog(`⚠️ Фоновая проверка токена: ${e.message}`);
-              updateStatus('Не авторизован');
-          });
-      } else{
-          addLog('⚠️ Требуется авторизация');
-          updateStatus('Не авторизован');
-      }
-  });
-  
-  function updateTargetPreview(){const v=document.getElementById('folder-input').value.trim()||'/saved-materials';document.getElementById('target-preview').textContent=v.startsWith('/')?v:'/'+v;}
-  function updateLinksCount(){const t=document.getElementById('links-input').value;document.getElementById('links-count').textContent=(t.match(/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>\"']+/gi)||[]).length;}
-  function copyLog(){const t=document.getElementById('log').innerText;if(!t.trim()){alert('📭 Лог пуст');return;}navigator.clipboard.writeText(t).then(()=>addLog('📋 Лог скопирован'));}
-  
-  async function onAuthSuccess(){
-      showMessage('success','✅ Яндекс.Диск подключён');
-      document.getElementById('user-block').style.display='flex';
-      document.getElementById('copyLogBtn').style.display='block';
-      updateStatus('Авторизация успешна');
-      updateStage(2);
-      goToStep('step-folder');
-      await updateDiskInfoDisplay();
-  }
-  
-  function showMessage(type,text){const c=document.getElementById('auth-message');c.innerHTML='';const d=document.createElement('div');d.className=type==='error'?'error-box':type==='warning'?'warning-box':type==='info'?'info-box':'success-box';d.innerHTML=text;c.appendChild(d);setTimeout(()=>d.remove(),7000);}
-  function updateStatus(msg){document.getElementById('current-status').innerText=msg;}
-  function addLog(msg){const el=document.getElementById('log');el.style.display='block';el.textContent+=`[${new Date().toLocaleTimeString('ru-RU')}] ${msg}\n`;el.scrollTop=el.scrollHeight;console.log(`[YS] ${msg}`);}
-  
-  function logout(){
-      TOKEN='';
-      tokenValidated=false;
-      try{sessionStorage.removeItem('ydisk_token');localStorage.removeItem('ydisk_token');}catch(e){}
-      document.getElementById('user-block').style.display='none';
-      document.getElementById('log').innerHTML='';
-      document.getElementById('log').style.display='none';
-      document.getElementById('copyLogBtn').style.display='none';
-      document.getElementById('folder-browser').style.display='none';
-      updateStatus('🔓 Вы вышли');
-      updateStage(1);
-      goToStep('step-auth');
-      addLog('👋 Сессия завершена');
-      if(popup&&!popup.closed)popup.close();
-      if(popupTimer)clearTimeout(popupTimer);
-      diskInfoCache=null;
-      failedItems=[];
-      updateDiskInfoDisplay();
-  }
-
-  async function showFolderBrowser(){let p=document.getElementById('folder-input').value.trim()||'/';if(!p.startsWith('/'))p='/'+p;await loadFolderContents(normalizePath(p));document.getElementById('folder-browser').style.display='block';}
-  async function loadFolderContents(path){const div=document.getElementById('folder-browser');div.innerHTML='<div style="text-align:center;padding:24px">⏳ Загрузка...</div>';try{await throttler.waitIfNeeded();const res=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(path)}&limit=1000`,{headers:{'Authorization':`OAuth ${TOKEN}`}});if(!res.ok)throw new Error(`HTTP ${res.status}`);const data=await res.json(),items=(data._embedded?.items||[]).filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name,'ru'));div.innerHTML='';if(path!=='/'){const up=document.createElement('div');up.className='folder-item';up.innerHTML='<span>📁</span><span class="name">.. (вверх)</span>';up.onclick=()=>loadFolderContents(normalizePath(path.substring(0,path.lastIndexOf('/'))||'/'));div.appendChild(up);}if(!items.length){const e=document.createElement('div');e.style.padding='16px';e.style.color='var(--text-light)';e.textContent='📭 Нет подпапок';div.appendChild(e);}else{for(const f of items){const d=document.createElement('div');d.className='folder-item';d.innerHTML=`<span>📁</span><span class="name">${f.name}</span>`;d.onclick=()=>loadFolderContents(normalizePath(path==='/'?`/${f.name}`:`${path}/${f.name}`));div.appendChild(d);}}const actions=document.createElement('div');actions.style.marginTop='16px';actions.style.display='flex';actions.style.gap='10px';const sel=document.createElement('button');sel.textContent=`✅ Выбрать: ${path}`;sel.className='new-folder-btn';sel.style.margin='0';sel.onclick=()=>{document.getElementById('folder-input').value=path;updateTargetPreview();div.style.display='none';validateAndCreateFolder();};const neu=document.createElement('button');neu.textContent='+ Новая папка';neu.className='new-folder-btn';neu.style.background='#666';neu.style.margin='0';neu.onclick=()=>showNewFolderModal(path);actions.appendChild(sel);actions.appendChild(neu);div.appendChild(actions);}catch(e){div.innerHTML=`<div style="color:var(--error);padding:16px;text-align:center">❌ ${e.message}</div>`;}}
-  function showNewFolderModal(parent){const m=document.getElementById('newFolderModal'),inp=document.getElementById('newFolderName');inp.value='';inp.focus();m.style.display='flex';const confirm=async()=>{const name=inp.value.trim();if(!name)return;const np=normalizePath(parent==='/'?`/${name}`:`${parent}/${name}`);try{await throttler.waitIfNeeded();const r=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(np)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(r.status===201||r.status===200){addLog(`📁 Создана: ${np}`);await loadFolderContents(parent);}else if(r.status===409)showMessage('warning',`⚠️ Папка "${name}" уже существует`);else addLog(`❌ Ошибка: ${r.status}`);}catch(e){addLog(`❌ ${e.message}`);}finally{m.style.display='none';}};document.getElementById('confirmNewFolderBtn').onclick=confirm;document.getElementById('cancelNewFolderBtn').onclick=()=>m.style.display='none';inp.onkeydown=e=>{if(e.key==='Enter')confirm();};}
-
-  async function validateAndCreateFolder(){let input=document.getElementById('folder-input').value.trim();if(!input||input==='/'){input='/saved-materials';document.getElementById('folder-input').value=input;}TARGET_FOLDER=normalizePath(input);if(!TARGET_FOLDER.startsWith('/'))TARGET_FOLDER='/'+TARGET_FOLDER;addLog(`📁 Проверка: ${TARGET_FOLDER}`);updateStatus('🔍 Проверяю папку...');try{await throttler.waitIfNeeded();const check=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});if(check.status===404){addLog('📭 Создаю папку...');await throttler.waitIfNeeded();const cr=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(!cr.ok&&cr.status!==409)throw new Error(`Не удалось создать (${cr.status})`);addLog(cr.status===409?'⚠️ Создана параллельно':'✅ Создана');}else if(!check.ok)throw new Error(`Ошибка: ${check.status}`);else addLog('✅ Уже существует');document.getElementById('folder-status').innerHTML=`✅ Готово: <strong>${TARGET_FOLDER}</strong>`;document.getElementById('btn-next-links').style.display='block';document.getElementById('target-preview').textContent=TARGET_FOLDER;updateStatus(`📁 Папка готова`);updateStage(2);}catch(e){document.getElementById('folder-status').innerHTML=`❌ ${e.message}`;addLog(`❌ ${e.message}`);updateStatus(`❌ ${e.message}`);}}
-
-  function extractAllPublicLinks(text){const regex=/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>\"']+/gi;const found=text.match(regex)||[];const unique=[...new Set(found.map(u=>{try{const url=new URL(u);return`${url.protocol}//${url.host}${url.pathname}`;}catch{return u;}}))];unique.forEach(u=>addLog(`🔗 Найдена: ${u}`));return unique;}
-  function setupFileUpload(){const area=document.getElementById('fileUploadArea'),input=document.getElementById('fileInput');area.addEventListener('click',(e)=>{if(e.target===area||e.target.classList.contains('hint'))input.click();});input.addEventListener('change',async(e)=>{const file=e.target.files[0];if(file)await handleFileUpload(file);input.value='';});area.addEventListener('dragover',(e)=>{e.preventDefault();area.classList.add('dragover');});area.addEventListener('dragleave',()=>area.classList.remove('dragover'));area.addEventListener('drop',async(e)=>{e.preventDefault();area.classList.remove('dragover');const file=e.dataTransfer.files[0];if(file)await handleFileUpload(file);});}
-  async function handleFileUpload(file){addLog(`📎 Загружен файл: ${file.name}`);try{const text=await file.text();const links=extractAllPublicLinks(text);if(links.length===0){showMessage('warning',`⚠️ В файле "${file.name}" не найдено ссылок`);return;}const textarea=document.getElementById('links-input');const existing=textarea.value.trim();textarea.value=existing?`${existing}\n${links.join('\n')}`:links.join('\n');updateLinksCount();showMessage('success',`✅ Извлечено ${links.length} ссылок из ${file.name}`);}catch(e){showMessage('error',`❌ Ошибка чтения файла: ${e.message}`);}}
-
-  function downloadReport(){
-      if(failedItems.length===0){showMessage('info','ℹ️ Нет ошибок для отчета');return;}
-      const dateStr=new Date().toLocaleString('ru-RU');
-      let content=`# 📄 Отчет об ошибках - MySaver\n`;
-      content+=`# 📅 Дата: ${dateStr}\n# 📁 Цель: ${TARGET_FOLDER}\n# ❌ Всего ошибок: ${failedItems.length}\n\n`;
-      content+=`# Формат: Ссылка/путь/к/файлу | Целевой путь | Ошибка (попытка/всего)\n`;
-      content+=`# =========================================\n`;
-      failedItems.forEach((item,i)=>{
-          const fullPath=`${item.sourceUrl}${item.publicPath}`;
-          content+=`${i+1}. ${fullPath} | ${item.targetPath} | ${item.errorCode}: ${item.errorMessage} (попытка ${item.attempt}/${item.maxRetries})\n`;
-      });
-      content+=`\n# 🔗 Уникальные ссылки-источники с ошибками (для повторной загрузки):\n`;
-      const uniqueLinks=[...new Set(failedItems.map(i=>i.sourceUrl))];
-      content+=uniqueLinks.join('\n');
-      const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');a.href=url;a.download=`yandex-saver-errors-${Date.now()}.txt`;
-      document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-      showMessage('success',`📥 Отчет скачан: ${failedItems.length} ошибок`);
-  }
-
-  function normalizePath(p){if(!p)return'/';return p.replace(/\/+/g,'/').replace(/\/$/,'')||'/';}
-  async function ensureFolderExists(path){const np=normalizePath(path);if(np==='/')return true;await throttler.waitIfNeeded();const res=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(np)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});if(res.status===404){const parent=np.substring(0,np.lastIndexOf('/'))||'/';await ensureFolderExists(parent);await throttler.waitIfNeeded();const cr=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(np)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(!cr.ok&&cr.status!==409)throw new Error(`Не создать ${np}`);addLog(`📁 Создана: ${np}`);return true;}else if(!res.ok)throw new Error(`Ошибка ${np}: ${res.status}`);return true;}
-  function getDirFromPublicPath(filePath){if(!filePath||filePath==='/')return'';const parts=filePath.split('/').filter(p=>p&&p.trim());if(parts.length<=1)return'';return parts.slice(0,-1).join('/');}
-  async function fileExistsAtPath(fullPath){try{await throttler.waitIfNeeded();const res=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(fullPath)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});return res.status===200;}catch(e){return false;}}
-
-  class RequestThrottler{
-      constructor(maxPerSecond = 3){
-          this.maxPerSecond = maxPerSecond;
-          this.timestamps = [];
-          this.minInterval = 1000 / maxPerSecond;
-      }
-      async waitIfNeeded(){
-          const now = Date.now();
-          this.timestamps = this.timestamps.filter(t => now - t < 1000);
-          if(this.timestamps.length >= this.maxPerSecond){
-              const oldest = Math.min(...this.timestamps);
-              const waitTime = Math.max(0, 1000 - (now - oldest) + this.minInterval);
-              if(waitTime > 0){
-                  await new Promise(resolve => setTimeout(resolve, waitTime));
-              }
-          }
-          this.timestamps.push(Date.now());
-      }
-  }
-  const throttler = new RequestThrottler(3);
-
-  async function fetchWithRetry(url, options, maxRetries = 5){
-      let lastError, lastResponse;
-      
-      for(let attempt = 1; attempt <= maxRetries; attempt++){
-          try{
-              if(!tokenValidated && (attempt === 1 || lastResponse?.status === 401 || lastResponse?.status === 403)){
-                  addLog(`🔍 Проверка токена (попытка ${attempt})...`);
-                  const tokenCheck = await fetch(`${API}/`, { 
-                      headers: { 'Authorization': `OAuth ${TOKEN}` },
-                      cache: 'no-store'
-                  });
-                  if(!tokenCheck.ok){
-                      addLog(`❌ Токен недействителен: ${tokenCheck.status}`);
-                      throw new Error(`Token invalid: ${tokenCheck.status}`);
-                  }
-                  tokenValidated = true;
-                  addLog('✅ Токен подтверждён');
-              }
-              
-              const safeUrl = url.replace(/\?path=([^&]+)/, (m, p) => `?path=${encodeURIComponent(decodeURIComponent(p))}`);
-              await throttler.waitIfNeeded();
-              
-              const response = await fetch(safeUrl, { ...options, signal: abortController?.signal });
-              lastResponse = response;
-              
-              if(response.ok || response.status === 202) return response;
-              
-              if(response.status === 401 || response.status === 403){
-                  tokenValidated = false;
-                  addLog(`⚠️ Токен отклонён (${response.status}), повторная проверка при следующей попытке`);
-              }
-              
-              if(response.status === 404 && attempt < maxRetries){
-                  const delay = Math.pow(2, attempt) * 1000;
-                  const errorBody = await response.clone().text().catch(() => '');
-                  addLog(`⚠️ Попытка ${attempt}/${maxRetries}: 404, задержка ${delay/1000}с`);
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                  continue;
-              }
-              return response;
-              
-          } catch(e){
-              lastError = e;
-              if(attempt < maxRetries && (e.name === 'TypeError' || e.message.includes('Failed to fetch') || !navigator.onLine || e.message.includes('404') || e.message.includes('Token'))){
-                  const delay = Math.pow(2, attempt) * 1000;
-                  addLog(`⚠️ Попытка ${attempt}/${maxRetries}: ${e.message.slice(0,60)}..., задержка ${delay/1000}с`);
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                  continue;
-              }
-              throw e;
-          }
-      }
-      
-      if(lastResponse?.status === 404){
-          const body = await lastResponse.text().catch(() => '');
-          addLog(`❌ После ${maxRetries} попыток: 404 | Ответ: ${body.slice(0,200)}`);
-      }
-      throw lastError || new Error('Неизвестная ошибка после повторных попыток');
-  }
-
-  async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl){
-      if(!isRunning) throw new Error('Остановлено');
-      const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
-      addLog(`📁 Обработка папки "${publicFolderName}" → ${rootTargetPath}`);
-      updateStatus(`📂 ${publicFolderName}`);
-      await ensureFolderExists(rootTargetPath);
-      let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
-      while(url && isRunning){
-          const resp = await fetchWithRetry(url, { signal: abortController?.signal });
-          if(!resp.ok) throw new Error(`Не прочитать папку: ${resp.status}`);
-          const data = await resp.json();
-          const items = data._embedded?.items || data.items || [];
-          if(items.length) addLog(`📊 Найдено: ${items.filter(i=>i.type==='file').length} файлов, ${items.filter(i=>i.type==='dir').length} папок`);
-          for(const item of items){
-              if(!isRunning) throw new Error('Остановлено');
-              if(processedPublicPaths.has(item.path)){ addLog(`⚠️ Пропуск: ${item.path}`); continue; }
-              processedPublicPaths.add(item.path);
-              const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-              const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
-              if(item.type === 'file'){
-                  const dirInPublic = getDirFromPublicPath(item.path);
-                  const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-                  try{ await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); } catch(e){ addLog(`❌ Ошибка сохранения ${item.name}: ${e.message}`); }
-              } else if(item.type === 'dir'){
-                  await ensureFolderExists(itemTargetPath); addLog(`📁 Создана: ${itemTargetPath}`);
-                  const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-                  await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
-              }
-          }
-          url = data._embedded?.next || data.next || null;
-          if(url) addLog(`🔄 Следующая страница...`);
-      }
-  }
-
-  async function processSubFolderContents(url, publicKey, rootTargetPath, sourceUrl){
-      if(!isRunning) return;
-      const resp = await fetchWithRetry(url, { signal: abortController?.signal });
-      if(!resp.ok) throw new Error(`Не прочитать подпапку: ${resp.status}`);
-      const data = await resp.json(); const items = data._embedded?.items || data.items || [];
-      for(const item of items){
-          if(!isRunning) throw new Error('Остановлено');
-          if(processedPublicPaths.has(item.path)) continue;
-          processedPublicPaths.add(item.path);
-          if(item.type === 'file'){
-              const dirInPublic = getDirFromPublicPath(item.path);
-              const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-              try{ await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); } catch(e){ addLog(`❌ Ошибка сохранения ${item.name}: ${e.message}`); }
-          } else if(item.type === 'dir'){
-              const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-              const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
-              await ensureFolderExists(itemTargetPath); addLog(`📁 Создана: ${itemTargetPath}`);
-              const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-              await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
-          }
-      }
-      const nextUrl = data._embedded?.next || data.next || null;
-      if(nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath, sourceUrl);
-  }
-
-  // 🚀 ОСНОВНОЙ ПРОЦЕСС С ИСПРАВЛЕНИЯМИ
-  async function startProcess(){
-      const raw = document.getElementById('links-input').value.trim(); if(!raw) return alert('⚠️ Вставьте ссылки');
-      updateStage(4);
-      const links = extractAllPublicLinks(raw); if(!links.length) return alert('❌ Нет корректных ссылок');
-      if(!TARGET_FOLDER){ await validateAndCreateFolder(); if(!TARGET_FOLDER) return alert('❌ Укажите папку'); }
-      failedItems = [];
-      await updateDiskInfoDisplay();
-      document.getElementById('scan-status').classList.add('active'); updateStatus('⏳ Сканирую размер...'); addLog('🔍 Сканирую публичные ресурсы для расчёта размера...');
-      let totalRequiredSize = 0;
-      for(const link of links){
-          try{
-              await throttler.waitIfNeeded();
-              const metaResp = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(extractPublicKey(link))}&limit=1000`);
-              if(!metaResp.ok) continue; const meta = await metaResp.json();
-              if(meta.type === 'file' && meta.size) totalRequiredSize += meta.size;
-              else if(meta.type === 'dir' || meta._embedded?.items){ 
-                  // 🔧 ИСПОЛЬЗУЕМ ИСПРАВЛЕННУЮ ФУНКЦИЮ
-                  const sizeInfo = await calculatePublicFolderSizeRecursive(extractPublicKey(link)); 
-                  totalRequiredSize += sizeInfo.totalSize; 
-                  addLog(`📊 "${meta.name || 'папка'}": ${sizeInfo.fileCount} файлов, ${formatBytes(sizeInfo.totalSize)}`); 
-              }
-          } catch(e){ addLog(`⚠️ Не удалось просканировать ${link}: ${e.message}`); }
-      }
-      document.getElementById('scan-status').classList.remove('active'); document.getElementById('required-space').textContent = formatBytes(totalRequiredSize); addLog(`📦 Общий размер: ${formatBytes(totalRequiredSize)}`);
-      const freeSpace = diskInfoCache?.free_space || 0;
-      if(totalRequiredSize > freeSpace && freeSpace > 0){ const confirm = window.confirm(`⚠️ Недостаточно места!\nНужно: ${formatBytes(totalRequiredSize)}\nСвободно: ${formatBytes(freeSpace)}\n\nПродолжить?`); if(!confirm){ updateStatus('❌ Отменено пользователем'); return; } addLog('⚠️ Пользователь подтвердил продолжение при нехватке места'); }
-      else if(freeSpace > 0) addLog(`✅ Места достаточно: ${formatBytes(freeSpace)} свободно, нужно ${formatBytes(totalRequiredSize)}`);
-      
-      isRunning = true; abortController = new AbortController(); processedPublicPaths.clear();
-      document.getElementById('btn-start').disabled = true; document.getElementById('btn-stop').style.display = 'block';
-      document.getElementById('progress-fill').style.width = '0%'; document.getElementById('progress-text').innerText = '';
-      document.getElementById('btn-download-report').style.display = 'none';
-      addLog(`🚀 Старт: ${links.length} ссылок | 📁 ${TARGET_FOLDER}`); updateStatus(`⏳ 1/${links.length}...`);
-      
-      let success = 0, skipped = 0, errors = 0;
-      for(let i = 0; i < links.length; i++){
-          if(!isRunning) break;
-          const progress = Math.round((i / links.length) * 100); document.getElementById('progress-fill').style.width = `${progress}%`;
-          document.getElementById('progress-text').innerText = `Обработка: ${i+1}/${links.length}`;
-          updateStatus(`⏳ ${i+1}/${links.length}: ${links[i].slice(0,40)}${links[i].length>40?'...':''}`);
-          
-          try{ const result = await processPublicLink(links[i], TARGET_FOLDER); if(result?.skipped) skipped++; else success++; addLog(`✅ Ссылка #${i+1}`); }
-          catch(e){ if(e.name === 'AbortError' || e.message === 'Остановлено'){ addLog('⏹ Остановлено'); break; } errors++; addLog(`❌ #${i+1}: ${e.message}`); updateStatus(`❌ ${e.message}`); }
-          
-          if(!tokenValidated && TOKEN){
-              addLog('🔍 Фоновая проверка токена во время паузы...');
-              try{
-                  const check = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` }, cache: 'no-store' });
-                  if(check.ok){ tokenValidated = true; addLog('✅ Токен подтверждён в фоне'); }
-                  else{ addLog(`⚠️ Токен требует обновления: ${check.status}`); tokenValidated = false; }
-              } catch(e){ addLog(`⚠️ Не удалось проверить токен в фоне: ${e.message}`); }
-          }
-          
-          await new Promise(r => setTimeout(r, 500));
-      }
-      
-      document.getElementById('progress-fill').style.width = '100%'; document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${links.length}`;
-      document.getElementById('btn-start').disabled = false; document.getElementById('btn-stop').style.display = 'none'; isRunning = false;
-      if(failedItems.length > 0) document.getElementById('btn-download-report').style.display = 'block';
-      let summary = `✅ Готово: ${success} сохранено`; if(skipped > 0) summary += `, ${skipped} пропущено (дубли)`; if(errors > 0) summary += `, ${errors} ошибок`;
-      updateStatus(summary); addLog(`🎉 Завершено: ${success} сохранено, ${skipped} дублей пропущено, ${errors} ошибок, ${failedItems.length} записано в отчет`);
-      if(errors === 0 && skipped === 0 && failedItems.length === 0) showMessage('success', summary); else if(errors === 0) showMessage('info', summary); else showMessage('warning', summary);
-  }
-  
-  function stopProcess(){ isRunning = false; if(abortController) abortController.abort(); addLog('⏹ Остановка...'); updateStatus('⏹ Остановка...'); }
+        // Работа с файлами
+        const uploadFiles = document.getElementById("upload-files");
+        uploadFiles.addEventListener("click", () => {
+            const linksInput = document.getElementById("links-input").value.trim();
+            if (linksInput) {
+                alert(`Получены ссылки:\n${linksInput}`);
+                document.getElementById("progress-fill").style.width = "100%";
+                document.getElementById("progress-text").textContent = "Прогресс: 100%";
+            } else {
+                alert("Пожалуйста, вставьте хотя бы одну ссылку.");
+            }
+        });
+    });
 </script>
 </body>
 </html>

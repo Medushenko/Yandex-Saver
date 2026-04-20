@@ -187,27 +187,53 @@
   function addLog(msg){const el=document.getElementById('log');el.style.display='block';el.textContent+=`[${new Date().toLocaleTimeString('ru-RU')}] ${msg}\n`;el.scrollTop=el.scrollHeight;console.log(`[YS] ${msg}`);}
   function logout(){TOKEN='';sessionStorage.removeItem('ydisk_token');document.getElementById('user-block').style.display='none';document.getElementById('log').innerHTML='';document.getElementById('log').style.display='none';document.getElementById('copyLogBtn').style.display='none';document.getElementById('folder-browser').style.display='none';updateStatus('🔓 Вы вышли');updateStage(1);goToStep('step-auth');addLog('👋 Сессия завершена');if(popup&&!popup.closed)popup.close();if(popupTimer)clearTimeout(popupTimer);diskInfoCache=null;updateDiskInfoDisplay();}
 
-  // ========== 💾 ИНФОРМАЦИЯ О ДИСКЕ ==========
-  function formatBytes(bytes){if(bytes==null||bytes===0)return'0 Б';const k=1024;const sizes=['Б','КБ','МБ','ГБ','ТБ','ПБ'];const i=Math.floor(Math.log(bytes)/Math.log(k));return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+' '+sizes[i];}
-  
-  async function getDiskInfo(){
-    try{
-      const res=await fetch(`${API}/`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
-      if(!res.ok)throw new Error(`HTTP ${res.status}`);
-      return await res.json();
-    }catch(e){addLog(`❌ Не удалось получить информацию о диске: ${e.message}`);return null;}
-  }
-  
-  async function updateDiskInfoDisplay(){
-    if(!TOKEN)return;
-    const info=await getDiskInfo();
-    if(info){
-      diskInfoCache=info;
-      document.getElementById('disk-free').textContent=formatBytes(info.free_space);
-      document.getElementById('disk-total').textContent=formatBytes(info.total_space);
-      document.getElementById('free-space').textContent=formatBytes(info.free_space);
+// ========== 💾 ИНФОРМАЦИЯ О ДИСКЕ — ИСПРАВЛЕНО ==========
+function formatBytes(bytes){
+  if(bytes==null||bytes===0)return'0 Б';
+  const k=1024;const sizes=['Б','КБ','МБ','ГБ','ТБ','ПБ'];
+  const i=Math.floor(Math.log(bytes)/Math.log(k));
+  return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+' '+sizes[i];
+}
+
+async function getDiskInfo(){
+  try{
+    addLog('🔍 Запрашиваю информацию о диске...');
+    const res=await fetch(`${API}/`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
+    if(!res.ok){
+      const errText=await res.text().catch(()=> '');
+      throw new Error(`HTTP ${res.status}: ${errText.slice(0,100)}`);
     }
+    const data=await res.json();
+    addLog(`📊 Диск: всего ${formatBytes(data.total_space)}, свободно ${formatBytes(data.free_space)}`);
+    return {
+      total_space: data.total_space||0,
+      used_space: data.used_space||0,
+      free_space: data.free_space||0  // 🔥 Гарантируем число, даже если null
+    };
+  }catch(e){
+    addLog(`❌ Не удалось получить информацию о диске: ${e.message}`);
+    // 🔥 Возвращаем заглушку, чтобы интерфейс не ломался
+    return {total_space:0,used_space:0,free_space:0};
   }
+}
+
+async function updateDiskInfoDisplay(){
+  if(!TOKEN)return;
+  const info=await getDiskInfo();
+  
+  // 🔥 Обновляем ВСЕ элементы с информацией о месте
+  const freeEl=document.getElementById('disk-free');
+  const totalEl=document.getElementById('disk-total');
+  const freePreviewEl=document.getElementById('free-space');
+  
+  if(freeEl)freeEl.textContent=formatBytes(info.free_space);
+  if(totalEl)totalEl.textContent=formatBytes(info.total_space);
+  if(freePreviewEl)freePreviewEl.textContent=formatBytes(info.free_space);
+  
+  // 🔥 Сохраняем в кэш для последующих проверок
+  diskInfoCache=info;
+  addLog(`💾 Кэш обновлён: свободно ${formatBytes(info.free_space)}`);
+}
 
   // ========== 📁 БРАУЗЕР ПАПОК ==========
   async function showFolderBrowser(){let p=document.getElementById('folder-input').value.trim()||'/';if(!p.startsWith('/'))p='/'+p;await loadFolderContents(normalizePath(p));document.getElementById('folder-browser').style.display='block';}
@@ -405,7 +431,8 @@
     addLog(`📦 Общий размер: ${formatBytes(totalRequiredSize)}`);
     
     // 🔥 ПРОВЕРКА МЕСТА НА ДИСКЕ
-    const freeSpace=diskInfoCache?.free_space||0;
+   const freeSpace=Number(diskInfoCache?.free_space)||0;
+    addLog(`🔍 Проверка места: свободно ${formatBytes(freeSpace)}, нужно ${formatBytes(totalRequiredSize)}`);
     if(totalRequiredSize>freeSpace){
       const confirm=window.confirm(`⚠️ Недостаточно места!\nНужно: ${formatBytes(totalRequiredSize)}\nСвободно: ${formatBytes(freeSpace)}\n\nПродолжить? Некоторые файлы могут не сохраниться.`);
       if(!confirm){updateStatus('❌ Отменено пользователем');return;}

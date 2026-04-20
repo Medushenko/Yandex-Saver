@@ -387,24 +387,73 @@
   // ========== 💾 ИНФОРМАЦИЯ О ДИСКЕ ==========
   function formatBytes(bytes){if(bytes==null||bytes===0)return'0 Б';const k=1024;const sizes=['Б','КБ','МБ','ГБ','ТБ','ПБ'];const i=Math.floor(Math.log(bytes)/Math.log(k));return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+' '+sizes[i];}
   
- async function getDiskInfo(){
-  const res = await fetch('https://cloud-api.yandex.net/v1/disk', {
-    headers: { 'Authorization': `OAuth ${TOKEN}` }  // 🔥 Прямой запрос по документации Яндекса
-  });
-  const data = await res.json();
-  // 🔥 Явное приведение к числу
-  return { 
-    free_space: Number(data.free_space) || 0,  // 🔥 Гарантирует число, а не null
-    total_space: Number(data.total_space) || 0 
-  };
+ async function getDiskInfo() {
+    try {
+        await throttler.waitIfNeeded();
+        const res = await fetchWithRetry(`${API}/`, {
+            headers: { 'Authorization': `OAuth ${TOKEN}` }
+        });
+        
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        }
+        
+        const data = await res.json();
+        
+        // Детальная проверка структуры ответа
+        const total = data.total_space !== undefined ? Number(data.total_space) : 0;
+        const used = data.used_space !== undefined ? Number(data.used_space) : 0;
+        const free = data.free_space !== undefined ? Number(data.free_space) : 0;
+        
+        // Проверка логической целостности данных
+        if (total > 0 && free === 0 && used === 0) {
+            // Возможная ошибка API - вычисляем свободное место
+            const calculatedFree = total - used;
+            addLog(`⚠️ API вернул free_space=0, вычисляем: ${calculatedFree}`);
+            return {
+                total_space: total,
+                used_space: used,
+                free_space: calculatedFree > 0 ? calculatedFree : 0
+            };
+        }
+        
+        return {
+            total_space: total,
+            used_space: used,
+            free_space: free
+        };
+    } catch (e) {
+        addLog(`❌ Ошибка получения информации о диске: ${e.message}`);
+        // Не кэшируем нулевые значения при ошибке
+        return null;
+    }
 }
 
-  async function updateDiskInfoDisplay(){
-    if(!TOKEN)return;
-    diskInfoCache=await getDiskInfo();
-    ['disk-free','free-space'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=formatBytes(diskInfoCache.free_space);});
-    const totalEl=document.getElementById('disk-total');if(totalEl)totalEl.textContent=formatBytes(diskInfoCache.total_space);
-  }
+
+ async function updateDiskInfoDisplay() {
+    if (!TOKEN) return;
+    
+    const info = await getDiskInfo();
+    if (!info) {
+        addLog('⚠️ Не удалось получить информацию о диске');
+        return;
+    }
+    
+    diskInfoCache = info;
+    
+    // Обновляем все элементы отображения
+    ['disk-free', 'free-space'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = formatBytes(diskInfoCache.free_space);
+    });
+    
+    const totalEl = document.getElementById('disk-total');
+    if (totalEl) totalEl.textContent = formatBytes(diskInfoCache.total_space);
+    
+    // Логируем для отладки
+    addLog(`💾 Диск: всего ${formatBytes(info.total_space)}, свободно ${formatBytes(info.free_space)}`);
+}
+
 
   // ========== 📁 БРАУЗЕР ПАПОК ==========
   async function showFolderBrowser(){let p=document.getElementById('folder-input').value.trim()||'/';if(!p.startsWith('/'))p='/'+p;await loadFolderContents(normalizePath(p));document.getElementById('folder-browser').style.display='block';}
@@ -535,30 +584,103 @@
     throw lastError || new Error('Неизвестная ошибка после повторных попыток');
   }
 
+asinc function extractPublicKey(fullUrl) {
+    try {
+        const url = new URL(fullUrl);
+        // Извлекаем идентификатор из пути
+        const pathMatch = url.pathname.match(/\\/d\\/([^\\/]+)/);
+        if (pathMatch) return pathMatch[1];
+        
+        // Альтернативные форматы ссылок
+        const shortMatch = url.pathname.match(/\\/i\\/([^\\/]+)/);
+        if (shortMatch) return shortMatch[1];
+        
+        return fullUrl; // fallback
+    } catch {
+        // Если не удалось распарсить URL, пытаемся извлечь вручную
+        const match = fullUrl.match(/(?:d|i)\\/([a-zA-Z0-9_-]+)/);
+        return match ? match[1] : fullUrl;
+    }
+}
+
+  
   // ========== 💾 СОХРАНЕНИЕ ФАЙЛА ==========
-  async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
+async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
+    
     const fullPath = normalizePath(`${targetPath}/${fileName}`);
+    
+    // Проверяем существование файла
     if (await fileExistsAtPath(fullPath)) {
-      addLog(`⏭ Уже существует: ${fileName}`);
-      return { skipped: true, reason: 'exists' };
+        addLog(`⏭ Уже существует: ${fileName}`);
+        return { skipped: true, reason: 'exists' };
     }
-    updateStatus(`💾 ${fileName}`); addLog(`⬇️ Сохраняю: ${fileName}`);
-    const params = new URLSearchParams({ public_key: publicKey, path: filePathInPublic, save_path: normalizePath(targetPath), name: fileName });
-    const response = await fetchWithRetry(`${API}/public/resources/save-to-disk?${params}`, { method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` } });
-    if (response.status === 202) { addLog(`⏳ В очереди: ${fileName}`); return { saved: true }; }
-    if (!response.ok) {
-      const t = await response.text().catch(() => '');
-      failedItems.push({ sourceUrl, publicPath: filePathInPublic, fileName, targetPath: fullPath, errorCode: response.status, errorMessage: t.slice(0, 200), attempt: 5, maxRetries: 5 });
-      throw new Error(`API ${response.status}: ${t.slice(0, 200)}`);
+    
+    updateStatus(`💾 ${fileName}`); 
+    addLog(`⬇️ Сохраняю: ${fileName} из ${filePathInPublic}`);
+    
+    // Детальное логирование параметров
+    addLog(`📤 Параметры: public_key=${publicKey}, path=${filePathInPublic}`);
+    
+    const params = new URLSearchParams({ 
+        public_key: publicKey, 
+        path: encodeURIComponent(filePathInPublic), // Важно: кодируем путь
+        save_path: normalizePath(targetPath), 
+        name: fileName 
+    });
+    
+    try {
+        const response = await fetchWithRetry(
+            `${API}/public/resources/save-to-disk?${params}`, 
+            { 
+                method: 'POST', 
+                headers: { 'Authorization': `OAuth ${TOKEN}` } 
+            }
+        );
+        
+        if (response.status === 202) { 
+            addLog(`⏳ В очереди: ${fileName}`); 
+            return { saved: true }; 
+        }
+        
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            addLog(`❌ Ошибка API ${response.status}: ${errorText}`);
+            
+            // Анализ ошибки 404
+            if (response.status === 404) {
+                addLog(`🔍 Детализация 404 для пути: ${filePathInPublic}`);
+                addLog(`🔍 Публичный ключ: ${publicKey}`);
+                addLog(`🔍 Полный URL: ${sourceUrl}`);
+            }
+            
+            failedItems.push({ 
+                sourceUrl, 
+                publicPath: filePathInPublic, 
+                fileName, 
+                targetPath: fullPath, 
+                errorCode: response.status, 
+                errorMessage: errorText.slice(0, 200), 
+                attempt: 5, 
+                maxRetries: 5 
+            });
+            throw new Error(`API ${response.status}: ${errorText.slice(0, 200)}`);
+        }
+        
+        const result = await response.json();
+        if (result.href || result.path || result.name) {
+            addLog(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`);
+            return { saved: true };
+        }
+        throw new Error('Неожиданный ответ API');
+        
+    } catch (error) {
+        // Добавляем дополнительную информацию для отладки
+        addLog(`🔍 Стек вызовов для ${fileName}: publicKey=${publicKey}, path=${filePathInPublic}`);
+        throw error;
     }
-    const result = await response.json();
-    if (result.href || result.path || result.name) {
-      addLog(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`);
-      return { saved: true };
-    }
-    throw new Error('Неожиданный ответ API');
-  }
+}
+
 
   // ========== 📂 ОБРАБОТКА ПАПОК ==========
   async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl) {
@@ -621,24 +743,55 @@
   }
 
   // ========== 🔗 ОБРАБОТКА ОДНОЙ ССЫЛКИ ==========
-  async function processPublicLink(publicUrl, targetBasePath) {
+async function processPublicLink(publicUrl, targetBasePath) {
     processedPublicPaths.clear();
-    const metaResp = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, { signal: abortController?.signal });
+    
+    // Извлекаем публичный ключ из полного URL
+    const publicKey = extractPublicKey(publicUrl);
+    addLog(`🔑 Извлечен публичный ключ: ${publicKey} из ${publicUrl}`);
+    
+    const metaResp = await fetchWithRetry(
+        `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}`, 
+        { signal: abortController?.signal }
+    );
+    
     if (!metaResp.ok) {
-      failedItems.push({ sourceUrl: publicUrl, publicPath: '/', fileName: '(корень)', targetPath: TARGET_FOLDER, errorCode: metaResp.status, errorMessage: 'Недоступна публичная ссылка', attempt: 5, maxRetries: 5 });
-      throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
+        const errorText = await metaResp.text().catch(() => '');
+        addLog(`❌ Ошибка запроса метаданных: ${metaResp.status} - ${errorText}`);
+        failedItems.push({ 
+            sourceUrl: publicUrl, 
+            publicPath: '/', 
+            fileName: '(корень)', 
+            targetPath: TARGET_FOLDER, 
+            errorCode: metaResp.status, 
+            errorMessage: errorText.slice(0, 200), 
+            attempt: 5, 
+            maxRetries: 5 
+        });
+        throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
     }
+    
     const meta = await metaResp.json();
+    
+    // Добавляем проверку структуры ответа
+    if (!meta.type && !meta._embedded) {
+        addLog(`⚠️ Необычный ответ API: ${JSON.stringify(meta).slice(0, 200)}`);
+    }
+    
     if (meta.type === 'file') {
-      addLog(`📄 Файл: ${meta.name}`);
-      return (await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name, publicUrl))?.skipped ? { skipped: true } : { saved: true };
+        addLog(`📄 Файл: ${meta.name} (${formatBytes(meta.size)})`);
+        const filePath = meta.path || `/${meta.name}`;
+        return (await savePublicFile(publicKey, filePath, targetBasePath, meta.name, publicUrl))?.skipped ? 
+            { skipped: true } : { saved: true };
     } else if (meta.type === 'dir' || meta._embedded?.items) {
-      const publicFolderName = meta.name || 'Без имени';
-      addLog(`📁 Папка: "${publicFolderName}"`);
-      await processPublicFolder(publicUrl, targetBasePath, publicFolderName, publicUrl);
-      return { saved: true };
-    } else throw new Error(`Неизвестный тип: ${meta.type}`);
-  }
+        const publicFolderName = meta.name || 'Без имени';
+        addLog(`📁 Папка: "${publicFolderName}"`);
+        await processPublicFolder(publicKey, targetBasePath, publicFolderName, publicUrl);
+        return { saved: true };
+    } else {
+        throw new Error(`Неизвестный тип: ${meta.type || 'отсутствует'}`);
+    }
+}
 
   // ========== 🚀 ОСНОВНОЙ ПРОЦЕСС ==========
   async function startProcess() {

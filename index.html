@@ -1,6 +1,6 @@
 <!--
 Yandex Saver — Сохранение файлов и папок
-Версия: 5.8
+Версия: 5.8.1
 Доработки (на основе фидбека Яндекс.Диск API):
 - [FIX] Свободное место: улучшена обработка ответа API (проверка free_space/used_space, fallback-расчёт)
 - [FIX] Пропуск файлов 404: корректное извлечение public_key из URL, кодирование путей, детальное логирование
@@ -18,7 +18,7 @@ Yandex Saver — Сохранение файлов и папок
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Yandex Saver v5.8</title>
+  <title>Yandex Saver v5.8.1</title>
   <style>
     :root {
       --bg: #f5f7fa;
@@ -312,6 +312,7 @@ Yandex Saver — Сохранение файлов и папок
       }
     }
   </style>
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 </head>
 
 <body>
@@ -941,18 +942,37 @@ Yandex Saver — Сохранение файлов и папок
 
     // === DOM Events ===
     els.btnAuth.addEventListener('click', () => {
-      const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // Замените на реальный
-      const redirectUri = window.location.origin + window.location.pathname;
-      const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-      const popup = window.open(authUrl, 'yandex-auth', 'width=500,height=600');
+      const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ⚠️ Замените!
+      const redirectUri = `${window.location.origin}${window.location.pathname}?auth_callback=1`;
 
-      const checkToken = setInterval(() => {
-        try {
-          const url = popup.location.href;
-          if (url.includes('#access_token=')) {
-            TOKEN = url.split('#access_token=')[1].split('&')[0];
-            popup.close();
-            clearInterval(checkToken);
+      // Генерируем state для защиты от CSRF
+      const state = btoa(Math.random().toString(36).substring(2, 15));
+      sessionStorage.setItem('oauth_state', state);
+
+      const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+
+      // Открываем в новой вкладке (не popup!) — так надёжнее
+      window.open(authUrl, '_blank');
+
+      // Слушаем hashchange в текущей вкладке (если пользователь вернётся)
+      const handleHashChange = () => {
+        if (window.location.hash.startsWith('#access_token=')) {
+          const hash = window.location.hash.substring(1);
+          const params = new URLSearchParams(hash);
+          const token = params.get('access_token');
+          const stateParam = params.get('state');
+
+          if (stateParam !== sessionStorage.getItem('oauth_state')) {
+            addLog('❌ Неверный state — возможна атака CSRF');
+            return;
+          }
+
+          if (token) {
+            TOKEN = token;
+            sessionStorage.removeItem('oauth_state');
+            // Убираем хэш из URL, чтобы не мешал
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+
             els.btnAuth.classList.add('hidden');
             els.btnLogout.classList.remove('hidden');
             els.authStatus.textContent = '✅ Диск подключён';
@@ -960,8 +980,21 @@ Yandex Saver — Сохранение файлов и папок
             addLog('🔑 Токен получен');
             updateDiskInfoDisplay();
           }
-        } catch (e) { /* cross-origin */ }
-      }, 500);
+        }
+      };
+
+      // Проверяем сразу (на случай, если уже в хэше)
+      handleHashChange();
+
+      // И слушаем изменения хэша
+      window.addEventListener('hashchange', handleHashChange);
+
+      // На случай, если пользователь закроет вкладку и вернётся — добавляем таймаут
+      setTimeout(() => {
+        window.removeEventListener('hashchange', handleHashChange);
+      }, 30000); // 30 секунд
+
+      addLog('🔗 Открыта вкладка для авторизации. Вернитесь сюда после входа.');
     });
 
     els.btnLogout.addEventListener('click', () => {

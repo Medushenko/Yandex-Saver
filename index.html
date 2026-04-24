@@ -1,6 +1,6 @@
 <!--
 Yandex Saver — Сохранение файлов и папок
-Версия: 5.8.1
+Версия: 5.8.5
 Доработки (на основе фидбека Яндекс.Диск API):
 - [FIX] Свободное место: улучшена обработка ответа API (проверка free_space/used_space, fallback-расчёт)
 - [FIX] Пропуск файлов 404: корректное извлечение public_key из URL, кодирование путей, детальное логирование
@@ -18,7 +18,7 @@ Yandex Saver — Сохранение файлов и папок
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Yandex Saver v5.8.3</title>
+  <title>Yandex Saver v5.8.5</title>
   <style>
     :root {
       --bg: #f5f7fa;
@@ -318,7 +318,7 @@ Yandex Saver — Сохранение файлов и папок
 <body>
   <div class="container">
     <header>
-      <h1 id="app-title">🗂 Yandex Saver <span class="badge">v5.8.3</span></h1>
+      <h1 id="app-title">🗂 Yandex Saver <span class="badge">v5.8.5</span></h1>
       <p style="font-size:0.85rem; color:var(--text-muted);">Сохранение файлов с оптимизацией для мобильных и надёжной
         авторизацией</p>
     </header>
@@ -941,12 +941,19 @@ Yandex Saver — Сохранение файлов и папок
     }
 
     // === DOM Events ===
-    els.btnAuth.addEventListener('click', () => {
-  const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ← замените!
-  const redirectUri =  'https://medushenko.github.io/Yandex-Saver/index.html'; // важно: должен совпадать с OAuth-клиентом
+ 
+ els.btnAuth.addEventListener('click', () => {
+  const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; //
 
-  const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-  
+  // ВАЖНО: используем текущий URL как redirect_uri
+  const redirectUri = window.location.href;
+
+  // Генерируем state для защиты от CSRF
+  const state = btoa(Math.random().toString(36).substring(2, 15));
+  sessionStorage.setItem('oauth_state', state);
+
+  const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+
   const popup = window.open(authUrl, 'yandex-auth', 'width=500,height=600,resizable=yes,scrollbars=yes');
 
   if (!popup) {
@@ -954,24 +961,37 @@ Yandex Saver — Сохранение файлов и папок
     return;
   }
 
-  // Проверяем каждые 500 мс
   const checkToken = setInterval(() => {
     try {
-      // Сначала пытаемся прочитать через window.opener (если popup ещё открыт)
+      // Проверяем, закрыто ли окно
       if (popup.closed) {
         clearInterval(checkToken);
-        addLog('❌ Всплывающее окно закрыто без токена');
+        addLog('⚠️ Всплывающее окно закрыто. Если вы вошли — перезагрузите страницу.');
         return;
       }
 
-      // Критически: попробуем получить хэш через opener.location.hash (более надёжно)
-      const hash = popup.location.hash;
-      if (hash && hash.startsWith('#access_token=')) {
-        const token = hash.split('#access_token=')[1].split('&')[0];
+      // Пытаемся получить URL. Это может выбросить SecurityError в Safari/private mode
+      const url = popup.location.href;
+
+      // Если URL содержит токен
+      if (url && url.includes('#access_token=')) {
+        const token = url.split('#access_token=')[1].split('&')[0];
+        const stateFromUrl = new URLSearchParams(popup.location.hash.substring(1)).get('state');
+
+        if (stateFromUrl !== state) {
+          addLog('❌ Ошибка: неверный state. Возможна атака CSRF.');
+          clearInterval(checkToken);
+          popup.close();
+          return;
+        }
+
         if (token) {
           TOKEN = token;
           popup.close();
           clearInterval(checkToken);
+          // Убираем хэш из URL, чтобы не мешал
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+
           els.btnAuth.classList.add('hidden');
           els.btnLogout.classList.remove('hidden');
           els.authStatus.textContent = '✅ Диск подключён';
@@ -980,18 +1000,40 @@ Yandex Saver — Сохранение файлов и папок
           updateDiskInfoDisplay();
         }
       }
-
     } catch (e) {
-      // Это нормально: SecurityError при cross-origin
-      // Но мы всё равно проверим, не закрылось ли окно
-      if (popup.closed) {
-        clearInterval(checkToken);
-        addLog('⚠️ Окно закрыто. Если вы вошли — перезагрузите страницу.');
+      // SecurityError (или DOMException) — это нормально в Safari или приватном режиме
+      if (e instanceof DOMException || e.name === 'SecurityError') {
+        // В приватном режиме Safari popup.location.href недоступен, но токен может быть в хэше страницы
+        // Проверим текущую страницу (на случай, если редирект произошёл в ту же вкладку)
+        if (window.location.hash.includes('#access_token=')) {
+          const token = window.location.hash.split('#access_token=')[1].split('&')[0];
+          const stateFromUrl = new URLSearchParams(window.location.hash.substring(1)).get('state');
+
+          if (stateFromUrl !== state) {
+            addLog('❌ Ошибка: неверный state (в текущем окне).');
+            clearInterval(checkToken);
+            return;
+          }
+
+          if (token) {
+            TOKEN = token;
+            clearInterval(checkToken);
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+
+            els.btnAuth.classList.add('hidden');
+            els.btnLogout.classList.remove('hidden');
+            els.authStatus.textContent = '✅ Диск подключён';
+            els.btnBrowse.disabled = false;
+            addLog('🔑 Токен получен (из текущего окна)');
+            updateDiskInfoDisplay();
+          }
+        }
+        // В других случаях просто игнорируем ошибку и продолжаем ждать
       }
     }
   }, 500);
 
-  // На случай, если пользователь закроет окно вручную
+  // На всякий случай, если окно закрылось, очистим интервал
   popup.addEventListener('beforeunload', () => {
     clearInterval(checkToken);
   });

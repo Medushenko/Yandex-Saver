@@ -18,7 +18,7 @@ Yandex Saver — Сохранение файлов и папок
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Yandex Saver v5.8.1</title>
+  <title>Yandex Saver v5.8.2</title>
   <style>
     :root {
       --bg: #f5f7fa;
@@ -318,7 +318,7 @@ Yandex Saver — Сохранение файлов и папок
 <body>
   <div class="container">
     <header>
-      <h1 id="app-title">🗂 Yandex Saver <span class="badge">v5.8</span></h1>
+      <h1 id="app-title">🗂 Yandex Saver <span class="badge">v5.8.2</span></h1>
       <p style="font-size:0.85rem; color:var(--text-muted);">Сохранение файлов с оптимизацией для мобильных и надёжной
         авторизацией</p>
     </header>
@@ -943,7 +943,7 @@ Yandex Saver — Сохранение файлов и папок
     // === DOM Events ===
     els.btnAuth.addEventListener('click', () => {
       const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ⚠️ Замените!
-      const redirectUri = `${window.location.origin}${window.location.pathname}?auth_callback=1`;
+      const redirectUri = `https://medushenko.github.io/Yandex-Saver/?auth_callback=1`;
 
       // Генерируем state для защиты от CSRF
       const state = btoa(Math.random().toString(36).substring(2, 15));

@@ -943,7 +943,7 @@ Yandex Saver — Сохранение файлов и папок
     // === DOM Events ===
     els.btnAuth.addEventListener('click', () => {
   const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ← замените!
-  const redirectUri =  'https://medushenko.github.io/Yandex-Saver/?auth_callback=1'; // важно: должен совпадать с OAuth-клиентом
+  const redirectUri =  'https://medushenko.github.io/Yandex-Saver/index.html'; // важно: должен совпадать с OAuth-клиентом
 
   const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
   

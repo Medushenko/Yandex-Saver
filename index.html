@@ -18,7 +18,7 @@ Yandex Saver — Сохранение файлов и папок
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Yandex Saver v5.8.2</title>
+  <title>Yandex Saver v5.8.3</title>
   <style>
     :root {
       --bg: #f5f7fa;
@@ -318,7 +318,7 @@ Yandex Saver — Сохранение файлов и папок
 <body>
   <div class="container">
     <header>
-      <h1 id="app-title">🗂 Yandex Saver <span class="badge">v5.8.2</span></h1>
+      <h1 id="app-title">🗂 Yandex Saver <span class="badge">v5.8.3</span></h1>
       <p style="font-size:0.85rem; color:var(--text-muted);">Сохранение файлов с оптимизацией для мобильных и надёжной
         авторизацией</p>
     </header>
@@ -942,60 +942,60 @@ Yandex Saver — Сохранение файлов и папок
 
     // === DOM Events ===
     els.btnAuth.addEventListener('click', () => {
-      const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ⚠️ Замените!
-      const redirectUri = `https://medushenko.github.io/Yandex-Saver/?auth_callback=1`;
+  const clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ← замените!
+  const redirectUri =  'https://medushenko.github.io/Yandex-Saver/?auth_callback=1'; // важно: должен совпадать с OAuth-клиентом
 
-      // Генерируем state для защиты от CSRF
-      const state = btoa(Math.random().toString(36).substring(2, 15));
-      sessionStorage.setItem('oauth_state', state);
+  const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  
+  const popup = window.open(authUrl, 'yandex-auth', 'width=500,height=600,resizable=yes,scrollbars=yes');
 
-      const authUrl = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+  if (!popup) {
+    alert('Блокировщик всплывающих окон предотвратил открытие авторизации. Разрешите всплывающие окна для этого сайта.');
+    return;
+  }
 
-      // Открываем в новой вкладке (не popup!) — так надёжнее
-      window.open(authUrl, '_blank');
+  // Проверяем каждые 500 мс
+  const checkToken = setInterval(() => {
+    try {
+      // Сначала пытаемся прочитать через window.opener (если popup ещё открыт)
+      if (popup.closed) {
+        clearInterval(checkToken);
+        addLog('❌ Всплывающее окно закрыто без токена');
+        return;
+      }
 
-      // Слушаем hashchange в текущей вкладке (если пользователь вернётся)
-      const handleHashChange = () => {
-        if (window.location.hash.startsWith('#access_token=')) {
-          const hash = window.location.hash.substring(1);
-          const params = new URLSearchParams(hash);
-          const token = params.get('access_token');
-          const stateParam = params.get('state');
-
-          if (stateParam !== sessionStorage.getItem('oauth_state')) {
-            addLog('❌ Неверный state — возможна атака CSRF');
-            return;
-          }
-
-          if (token) {
-            TOKEN = token;
-            sessionStorage.removeItem('oauth_state');
-            // Убираем хэш из URL, чтобы не мешал
-            history.replaceState(null, '', window.location.pathname + window.location.search);
-
-            els.btnAuth.classList.add('hidden');
-            els.btnLogout.classList.remove('hidden');
-            els.authStatus.textContent = '✅ Диск подключён';
-            els.btnBrowse.disabled = false;
-            addLog('🔑 Токен получен');
-            updateDiskInfoDisplay();
-          }
+      // Критически: попробуем получить хэш через opener.location.hash (более надёжно)
+      const hash = popup.location.hash;
+      if (hash && hash.startsWith('#access_token=')) {
+        const token = hash.split('#access_token=')[1].split('&')[0];
+        if (token) {
+          TOKEN = token;
+          popup.close();
+          clearInterval(checkToken);
+          els.btnAuth.classList.add('hidden');
+          els.btnLogout.classList.remove('hidden');
+          els.authStatus.textContent = '✅ Диск подключён';
+          els.btnBrowse.disabled = false;
+          addLog('🔑 Токен получен');
+          updateDiskInfoDisplay();
         }
-      };
+      }
 
-      // Проверяем сразу (на случай, если уже в хэше)
-      handleHashChange();
+    } catch (e) {
+      // Это нормально: SecurityError при cross-origin
+      // Но мы всё равно проверим, не закрылось ли окно
+      if (popup.closed) {
+        clearInterval(checkToken);
+        addLog('⚠️ Окно закрыто. Если вы вошли — перезагрузите страницу.');
+      }
+    }
+  }, 500);
 
-      // И слушаем изменения хэша
-      window.addEventListener('hashchange', handleHashChange);
-
-      // На случай, если пользователь закроет вкладку и вернётся — добавляем таймаут
-      setTimeout(() => {
-        window.removeEventListener('hashchange', handleHashChange);
-      }, 30000); // 30 секунд
-
-      addLog('🔗 Открыта вкладка для авторизации. Вернитесь сюда после входа.');
-    });
+  // На случай, если пользователь закроет окно вручную
+  popup.addEventListener('beforeunload', () => {
+    clearInterval(checkToken);
+  });
+});
 
     els.btnLogout.addEventListener('click', () => {
       TOKEN = null;

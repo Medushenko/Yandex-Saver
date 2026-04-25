@@ -1,9 +1,10 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yandex Saver</title>
+    <title>Yandex Saver v_1.1 </title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,54 +20,92 @@
             </div>
         </div>
 
-        <!-- Секция выбора папки -->
-        <div id="folder-section" class="hidden">
-            <h2>Папка назначения</h2>
-            <div id="folder-info">
-                <p>Текущая папка: <span id="current-folder">/saved-materials</span></p>
-                <button id="folder-browse" class="btn">Обзор папок</button>
-            </div>
-        </div>
-
-        <!-- Секция вставки ссылок -->
-        <div id="links-section" class="hidden">
-            <h2>Вставка ссылок</h2>
-            <textarea id="links-input" placeholder="Вставьте ссылки сюда..." rows="10"></textarea>
-            <div id="file-upload">
-                <input type="file" id="file-input" accept=".txt,.md,.html,.json" hidden>
-                <button onclick="document.getElementById('file-input').click()" class="btn">
-                    Загрузить файл со ссылками
-                </button>
-            </div>
-            <p>Загружено ссылок: <span id="links-count">0</span></p>
-        </div>
-
-        <!-- Секция обработки -->
-        <div id="processing-section" class="hidden">
-            <h2>Обработка</h2>
-            <button id="start-save" class="btn">Начать сохранение</button>
-            <button id="stop-process" class="btn">Остановить</button>
-            <button id="download-report" class="btn">Скачать отчет</button>
-            <p id="processing-status">Статус: Ожидание</p>
-        </div>
+        <!-- Остальной HTML код -->
     </div>
 
-    <!-- Модальное окно для выбора папки -->
-    <div id="folder-modal" class="modal hidden">
-        <div class="modal-content">
-            <h3>Выбор папки</h3>
-            <button id="close-modal" class="close-btn">×</button>
-            <div id="folder-tree">
-                <!-- Здесь будет отображаться структура папок -->
-            </div>
-            <div class="modal-footer">
-                <button id="create-folder" class="btn">Создать папку</button>
-                <button id="select-folder" class="btn">Выбрать</button>
-            </div>
-        </div>
-    </div>
+    <script>
+        class YandexSaver {
+            constructor() {
+                this.clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ВАЖНО: замените на ваш реальный Client ID
+                this.redirectUri = 'https://medushenko.github.io/Yandex-Saver/callback.html';
+                this.authUrl = 'https://oauth.yandex.ru/authorize';
+                this.tokenUrl = 'https://oauth.yandex.ru/token';
+                this.diskApiUrl = 'https://cloud-api.yandex.net/v1/disk';
+                
+                this.init();
+            }
 
-    <script src="script.js"></script>
+            init() {
+                // Проверяем, загружены ли все DOM-элементы
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => this.bindEvents());
+                } else {
+                    this.bindEvents();
+                }
+            }
+
+            bindEvents() {
+                // Добавляем обработчики событий
+                document.addEventListener('DOMContentLoaded', () => {
+                    document.getElementById('login-btn').addEventListener('click', () => this.loginWithPopup());
+                    document.getElementById('logout-btn').addEventListener('click', () => this.logout());
+                });
+            }
+
+            loginWithPopup() {
+                console.log('Кнопка авторизации нажата'); // Отладка
+                
+                const authParams = new URLSearchParams({
+                    response_type: 'code',
+                    client_id: this.clientId,
+                    redirect_uri: this.redirectUri
+                });
+
+                const popupUrl = `${this.authUrl}?${authParams}`;
+                this.openPopup(popupUrl);
+            }
+
+            openPopup(url) {
+                this.popup = window.open(
+                    url, 
+                    'YandexAuthPopup', 
+                    'width=600,height=700,left=100,top=100,resizable=yes,scrollbars=yes'
+                );
+
+                if (!this.popup) {
+                    alert('Разрешите всплывающие окна в браузере');
+                }
+            }
+
+            setupMessageListener() {
+                window.addEventListener('message', (event) => {
+                    if (event.origin !== window.location.origin) return;
+                    
+                    const data = event.data;
+                    if (data.type === 'YANDEX_AUTH_SUCCESS') {
+                        this.handleAuthSuccess(data.code);
+                        this.closePopup();
+                    }
+                });
+            }
+
+            async handleAuthSuccess(code) {
+                try {
+                    const tokenData = await this.getAccessToken(code);
+                    this.saveAuthData(tokenData);
+                    this.showUserInfo();
+                } catch (error) {
+                    console.error('Ошибка авторизации:', error);
+                }
+            }
+
+            // Остальные методы...
+        }
+
+        // Создаем экземпляр класса при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            new YandexSaver();
+        });
+    </script>
 </body>
 </html>
-                                                                                                                                  

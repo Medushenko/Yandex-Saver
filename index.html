@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Yandex Saver v5.8.2</title>
+    <title>Yandex Saver v5.9</title>
     <style>
         :root {
             --bg: #121212; --surface: #1e1e1e; --border: #333; --text: #e0e0e0;
@@ -67,7 +67,7 @@
 </head>
 <body>
 <div class="container">
-    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.8.2</span></h1>
+    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9</span></h1>
     <p class="subtitle">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
 
     <div id="userBlock" class="user-block hidden">
@@ -158,13 +158,16 @@ const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
 const API = 'https://cloud-api.yandex.net/v1/disk';
 
 // ==================== STATE ====================
-let TOKEN = sessionStorage.getItem('ydisk_token') || '';
+let TOKEN = '';
 let TARGET_FOLDER = '/saved-materials';
 let isRunning = false;
 let abortController = null;
 let popup = null, popupTimer = null;
 let processedPublicPaths = new Set();
 let currentBrowsePath = '/';
+let tokenValidated = false;
+let diskInfoCache = null;
+let failedItems = [];
 
 const state = {
     links: [],
@@ -172,10 +175,8 @@ const state = {
         totalLinks: 0, foldersProcessed: 0, totalFiles: 0, totalFilesSize: 0,
         successCount: 0, successSize: 0, successFiles: [],
         duplicateCount: 0, duplicateSize: 0, duplicateFiles: [],
-        errorCount: 0, errorSize: 0, errorFiles: [],
-        failedItems: []
-    },
-    logs: []
+        errorCount: 0, errorSize: 0, errorFiles: []
+    }
 };
 
 // ==================== DOM ====================
@@ -183,8 +184,7 @@ const el = id => document.getElementById(id);
 const authBtn = el('authBtn'), authStatus = el('authStatus'), authMessage = el('authMessage');
 const userBlock = el('userBlock'), logoutBtn = el('logoutBtn');
 const targetPathInput = el('targetFolderPath'), browseBtn = el('browseBtn');
-const folderBrowser = el('folderBrowser');
-const btnNextLinks = el('btnNextLinks');
+const folderBrowser = el('folderBrowser'), btnNextLinks = el('btnNextLinks');
 const newFolderModal = el('newFolderModal'), newFolderName = el('newFolderName');
 const closeNewFolderBtn = el('closeNewFolderBtn'), confirmNewFolderBtn = el('confirmNewFolderBtn');
 const linksInput = el('linksInput'), dropZone = el('dropZone'), fileInput = el('fileInput');
@@ -196,7 +196,7 @@ const logArea = el('logArea'), copyLogBtn = el('copyLogBtn'), statusBadge = el('
 const reportModal = el('reportModal'), reportBody = el('reportBody'), closeReportBtn = el('closeReportBtn');
 
 // ==================== LOGGING & UI ====================
-function log(msg, type = 'info') {
+function addLog(msg, type = 'info') {
     const p = document.createElement('p');
     p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
     p.className = type === 'success' ? 'log-success' : type === 'warn' ? 'log-warn' : type === 'error' ? 'log-error' : '';
@@ -235,66 +235,113 @@ function normalizePath(p) {
 
 // ==================== АКТИВАЦИЯ КНОПКИ СТАРТА ====================
 function updateStartButtonState() {
-    // Кнопка активна ТОЛЬКО если есть токен И хотя бы одна ссылка
     startBtn.disabled = !(TOKEN && state.links.length > 0);
 }
 
-// ==================== АВТОРИЗАЦИЯ ====================
-function startOAuthPopup() {
-    updateStatus('Открытие окна авторизации...', 'status-running');
-    const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=login:info disk:read disk:write`;
-    const width = 600, height = 700;
-    const left = (screen.width - width) / 2, top = (screen.height - height) / 2;
-    popup = window.open(url, 'YandexAuth', `width=${width},height=${height},left=${left},top=${top}`);
-    if (!popup) { updateStatus('Разрешите всплывающие окна', 'status-stopped'); showMessage('error', 'Разрешите всплывающие окна'); return; }
-    window.addEventListener('message', receiveTokenFromPopup);
-    popupTimer = setTimeout(() => { if (popup && !popup.closed) popup.close(); updateStatus('Таймаут авторизации', 'status-stopped'); window.removeEventListener('message', receiveTokenFromPopup); popupTimer = null; }, 5 * 60 * 1000);
-}
-function receiveTokenFromPopup(event) {
-    if (event.origin !== window.location.origin) return;
-    if (event.data && event.data.type === 'yandex_token') {
-        clearTimeout(popupTimer); popupTimer = null;
-        if (event.data.token) { log('🔑 Токен получен, проверяем...', 'info'); verifyTokenAndProceed(event.data.token); }
-        if (popup && !popup.closed) popup.close();
-        window.removeEventListener('message', receiveTokenFromPopup);
-    }
-}
-if (window.opener && window.location.hash && window.location.hash.includes('access_token=')) {
-    const match = window.location.hash.match(/access_token=([^&]+)/);
-    if (match) { window.opener.postMessage({ type: 'yandex_token', token: decodeURIComponent(match[1]) }, window.location.origin); window.close(); }
-}
-async function verifyTokenAndProceed(token) {
+// ==================== 🔐 АВТОРИЗАЦИЯ (ТОЧНО КАК В v5.5 - НЕ ИЗМЕНЯТЬ) ====================
+function getStoredToken() {
     try {
-        const res = await fetch(`${API}/?pretty=true`, { headers: { 'Authorization': `OAuth ${token}` } });
-        if (res.ok) { TOKEN = token; sessionStorage.setItem('ydisk_token', TOKEN); log('✅ Токен действителен', 'success'); onAuthSuccess(); }
-        else { log('❌ Токен недействителен', 'error'); logout(); }
-    } catch (e) { log(`Ошибка: ${e.message}`, 'error'); logout(); }
+      let token = sessionStorage.getItem('ydisk_token');
+      if (token && token.length > 20) return token;
+      token = localStorage.getItem('ydisk_token');
+      if (token && token.length > 20) {
+        addLog('📱 iOS: токен восстановлен из localStorage');
+        sessionStorage.setItem('ydisk_token', token);
+        return token;
+      }
+    } catch(e) { addLog(`⚠️ Ошибка чтения токена: ${e.message}`); }
+    return '';
 }
-function onAuthSuccess() {
-    showMessage('success', '✅ Яндекс.Диск подключён');
-    userBlock.classList.remove('hidden');
-    authStatus.textContent = '✅ Подключён'; authStatus.className = 'status-badge status-success';
-    updateStatus('Авторизовано', 'status-success');
-    goToStep('stepFolder'); fetchDiskInfo(); updateStartButtonState(); // 🔥 Проверяем, есть ли уже ссылки
-}
-function logout() {
-    TOKEN = ''; sessionStorage.removeItem('ydisk_token');
-    userBlock.classList.add('hidden'); authStatus.textContent = '⏳ Ожидание'; authStatus.className = 'status-badge status-idle';
-    logArea.innerHTML = ''; state.logs = []; updateStatus('Вы вышли', 'status-idle'); goToStep('stepAuth'); updateStartButtonState();
-}
-async function fetchDiskInfo() {
+function storeToken(token) {
     try {
-        const res = await fetch(`${API}/?pretty=true`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-        if (res.ok) { 
-            const d = await res.json(); 
-            const free = Number(d.free_space || (d.total_space - d.used_space));
-            const total = Number(d.total_space);
-            statFreeSpace.textContent = `${formatSize(free)} из ${formatSize(total)}`;
-        }
-    } catch (e) { log('Ошибка инфо о диске: ' + e.message, 'error'); }
+      sessionStorage.setItem('ydisk_token', token);
+      localStorage.setItem('ydisk_token', token);
+      addLog('🔑 Токен сохранён в sessionStorage + localStorage');
+    } catch(e) { addLog(`❌ Ошибка сохранения токена: ${e.message}`); }
+}
+TOKEN = getStoredToken();
+
+function startOAuthPopup(){
+    updateStatus('🔐 Открытие окна авторизации...', 'status-running');
+    const authUrl=`https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+    popup=window.open(authUrl,'YandexAuth',`width=520,height=700,left=${Math.floor((screen.width-520)/2)},top=${Math.floor((screen.height-700)/2)}`);
+    if(!popup){showMessage('error','❌ Разрешите всплывающие окна');return;}
+    window.addEventListener('message',handlePopupMessage);
+    popupTimer=setTimeout(()=>{if(popup&&!popup.closed)popup.close();window.removeEventListener('message',handlePopupMessage);popupTimer=null;},5*60*1000);
 }
 
-// ==================== БРАУЗЕР ПАПОК (ВОССТАНОВЛЕН КАК В 5.5) ====================
+function handlePopupMessage(event){
+    if(event.origin!==window.location.origin||!event.data?.token)return;
+    if(popupTimer){clearTimeout(popupTimer);popupTimer=null;}
+    addLog(`📨 Получен токен от popup (длина: ${event.data.token.length})`);
+    verifyTokenAndProceed(event.data.token);
+    if(popup&&!popup.closed)popup.close();
+    window.removeEventListener('message',handlePopupMessage);
+}
+
+// Глобальная проверка хеша (выполняется при загрузке страницы)
+if(window.location.hash.includes('access_token=')){
+    const match=window.location.hash.match(/access_token=([^&]+)/);
+    if(match?.[1]){
+        const token=decodeURIComponent(match[1]);
+        addLog(`🔗 Возврат из OAuth: токен получен (длина: ${token.length})`);
+        verifyTokenAndProceed(token);
+        history.replaceState(null,null,window.location.pathname);
+    }
+}
+
+async function verifyTokenAndProceed(token){
+    updateStatus('✅ Проверка токена...', 'status-running');
+    addLog(`🔍 Проверяю токен (длина: ${token?.length||0})`);
+    try{
+        const test = await fetch(`${API}/`, {
+            headers: { 'Authorization': `OAuth ${token}` },
+            cache: 'no-store'
+        });
+        if(test.ok){
+            TOKEN = token;
+            storeToken(TOKEN);
+            tokenValidated = true;
+            addLog('🔑 Токен принят и сохранён');
+            await onAuthSuccess();
+        } else {
+            const errText = await test.text().catch(()=> '');
+            addLog(`❌ Токен отклонён: ${test.status} ${errText.slice(0,100)}`);
+            logout();
+        }
+    } catch(e){
+        addLog(`❌ Ошибка проверки токена: ${e.message}`);
+        logout();
+    }
+}
+
+async function onAuthSuccess(){
+    showMessage('success','✅ Яндекс.Диск подключён');
+    userBlock.classList.remove('hidden');
+    copyLogBtn.style.display='block';
+    updateStatus('Авторизация успешна', 'status-success');
+    goToStep('stepFolder');
+    await updateDiskInfoDisplay();
+    updateStartButtonState();
+}
+
+function logout(){
+    TOKEN=''; tokenValidated=false;
+    try{sessionStorage.removeItem('ydisk_token');localStorage.removeItem('ydisk_token');}catch(e){}
+    userBlock.classList.add('hidden');
+    logArea.innerHTML=''; logArea.style.display='none';
+    copyLogBtn.style.display='none';
+    folderBrowser.style.display='none';
+    updateStatus('🔓 Вы вышли', 'status-idle');
+    goToStep('stepAuth');
+    addLog('👋 Сессия завершена');
+    if(popup&&!popup.closed)popup.close();
+    if(popupTimer)clearTimeout(popupTimer);
+    diskInfoCache=null; failedItems=[];
+    updateStartButtonState();
+}
+
+// ==================== 📁 БРАУЗЕР ПАПОК ====================
 async function showFolderBrowser() {
     let p = targetPathInput.value.trim() || '/';
     if (!p.startsWith('/')) p = '/' + p;
@@ -311,7 +358,6 @@ async function loadFolderContents(path) {
         const folders = (data._embedded?.items || []).filter(i => i.type === 'dir');
         folderBrowser.innerHTML = '';
         
-        // Кнопка "Наверх"
         if (path !== '/') {
             const parent = normalizePath(path.substring(0, path.lastIndexOf('/')) || '/');
             const up = document.createElement('div'); up.className = 'folder-item';
@@ -319,54 +365,29 @@ async function loadFolderContents(path) {
             up.onclick = () => { currentBrowsePath = parent; loadFolderContents(parent); };
             folderBrowser.appendChild(up);
         }
-        
-        if (folders.length === 0) {
-            folderBrowser.innerHTML += `<div style="padding:8px; color:#888;">Нет подпапок</div>`;
-        } else {
+        if (folders.length === 0) folderBrowser.innerHTML += `<div style="padding:8px; color:#888;">Нет подпапок</div>`;
+        else {
             folders.forEach(f => {
                 const div = document.createElement('div'); div.className = 'folder-item';
                 div.innerHTML = `<span>📁</span><span class="name">${f.name}</span>`;
-                div.onclick = () => { 
-                    currentBrowsePath = normalizePath(f.path); 
-                    loadFolderContents(currentBrowsePath); 
-                };
+                div.onclick = () => { currentBrowsePath = normalizePath(f.path); loadFolderContents(currentBrowsePath); };
                 folderBrowser.appendChild(div);
             });
         }
-        
-        // 🔥 Кнопки выбора и создания (генерируются внизу списка, как в 5.5)
         const actions = document.createElement('div');
-        actions.style.marginTop = '16px';
-        actions.style.display = 'flex';
-        actions.style.gap = '10px';
-        
-        const sel = document.createElement('button');
-        sel.textContent = `✅ Выбрать: ${path}`;
-        sel.className = 'btn btn-success'; sel.style.margin = '0';
-        sel.onclick = () => {
-            TARGET_FOLDER = normalizePath(path);
-            targetPathInput.value = TARGET_FOLDER;
-            statTargetFolder.textContent = TARGET_FOLDER;
-            folderBrowser.classList.add('hidden');
-            btnNextLinks.classList.remove('hidden');
-            log(`📁 Выбрана: ${TARGET_FOLDER}`, 'success');
-        };
+        actions.style.marginTop = '16px'; actions.style.display = 'flex'; actions.style.gap = '10px';
+        const sel = document.createElement('button'); sel.textContent = `✅ Выбрать: ${path}`; sel.className = 'btn btn-success'; sel.style.margin = '0';
+        sel.onclick = () => { TARGET_FOLDER = normalizePath(path); targetPathInput.value = TARGET_FOLDER; statTargetFolder.textContent = TARGET_FOLDER; folderBrowser.classList.add('hidden'); btnNextLinks.classList.remove('hidden'); addLog(`📁 Выбрана: ${TARGET_FOLDER}`, 'success'); };
         actions.appendChild(sel);
-        
-        const neu = document.createElement('button');
-        neu.textContent = '+ Новая папка';
-        neu.className = 'btn btn-secondary'; neu.style.margin = '0';
+        const neu = document.createElement('button'); neu.textContent = '+ Новая папка'; neu.className = 'btn btn-secondary'; neu.style.margin = '0';
         neu.onclick = () => { newFolderName.value = ''; newFolderName.focus(); newFolderModal.style.display = 'flex'; };
         actions.appendChild(neu);
-        
         folderBrowser.appendChild(actions);
     } catch (e) {
         folderBrowser.innerHTML = `<div style="padding:8px; color:#f44336;">Ошибка: ${e.message}</div>`;
-        log(`❌ Ошибка загрузки папок: ${e.message}`, 'error');
+        addLog(`❌ Ошибка загрузки папок: ${e.message}`, 'error');
     }
 }
-
-// Модальное окно новой папки
 closeNewFolderBtn.onclick = () => { newFolderModal.style.display = 'none'; };
 confirmNewFolderBtn.onclick = async () => {
     const name = newFolderName.value.trim();
@@ -375,15 +396,15 @@ confirmNewFolderBtn.onclick = async () => {
     try {
         const res = await fetch(`${API}/resources?path=${encodeURIComponent(newPath)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } });
         if (res.ok || res.status === 409) {
-            log(`📁 Создана: ${newPath}`, 'success');
+            addLog(`📁 Создана: ${newPath}`, 'success');
             await loadFolderContents(currentBrowsePath);
             newFolderModal.style.display = 'none';
         } else { throw new Error(`Ошибка ${res.status}`); }
-    } catch (e) { log(`❌ Ошибка создания: ${e.message}`, 'error'); }
+    } catch (e) { addLog(`❌ Ошибка создания: ${e.message}`, 'error'); }
 };
 newFolderModal.addEventListener('click', e => { if (e.target === newFolderModal) newFolderModal.style.display = 'none'; });
 
-// ==================== ССЫЛКИ ====================
+// ==================== 🔗 ССЫЛКИ ====================
 function parseLinks(text) {
     return (text.match(/https?:\/\/[^\s<>"'`]+/g) || []).filter(l => l.includes('disk.yandex.ru') || l.includes('yadi.sk'));
 }
@@ -391,7 +412,7 @@ function updateLinksPreview() {
     state.links = parseLinks(linksInput.value);
     state.stats.totalLinks = state.links.length;
     statTotalLinks.textContent = state.links.length;
-    updateStartButtonState(); // 🔥 Автоматически активирует/деактивирует кнопку старта
+    updateStartButtonState();
 }
 linksInput.addEventListener('input', updateLinksPreview);
 dropZone.addEventListener('click', () => fileInput.click());
@@ -400,34 +421,18 @@ fileInput.addEventListener('change', e => { if(e.target.files[0]) { const r=new 
 ['dragleave','drop'].forEach(e=>dropZone.addEventListener(e,ev=>{ev.preventDefault();dropZone.classList.remove('dragover');}));
 dropZone.addEventListener('drop', e => { const f=e.dataTransfer.files[0]; if(f&&/\.(txt|md|html|json)$/i.test(f.name)) { const r=new FileReader(); r.onload=()=>{linksInput.value+='\n'+r.result; updateLinksPreview();}; r.readAsText(f); }});
 
-// ==================== ОТЧЁТЫ ====================
+// ==================== 📤 ОТЧЁТЫ ====================
 function generateReportContent() {
-    const s = state.stats;
-    const total = s.successCount + s.duplicateCount + s.errorCount;
-    const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
+    const s = state.stats; const total = s.successCount + s.duplicateCount + s.errorCount; const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
     let html = `<div class="report-section"><h3>📊 Сводная статистика</h3><p><b>Ссылок:</b> ${s.totalLinks} | <b>Папок:</b> ${s.foldersProcessed} | <b>Файлов:</b> ${s.totalFiles} (${formatSize(s.totalFilesSize)})</p><p><b>Успешно:</b> ${s.successCount} (${formatSize(s.successSize)}) | <b>Дубли:</b> ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | <b>Ошибки:</b> ${s.errorCount} (${formatSize(s.errorSize)})</p><p><b>Эффективность:</b> <span style="color:var(--accent)">${rate}%</span></p></div>`;
-    if (s.errorFiles.length) {
-        html += `<div class="report-section"><h3 style="color:var(--error)">❌ Ошибки (${s.errorCount}, ${formatSize(s.errorSize)})</h3><ul>`;
-        s.errorFiles.forEach((f, i) => { html += `<li><span>${i+1}.</span> <a href="${f.url}" target="_blank">${f.name}</a> <span class="file-size">${f.size ? formatSize(f.size) : '?'}</span><br><span style="color:#aaa;font-size:0.85em">Причина: ${f.reason}</span></li>`; });
-        html += `</ul></div>`;
-    }
-    if (s.duplicateFiles.length) {
-        html += `<div class="report-section"><h3 style="color:var(--warning)">🔄 Дубликаты (${s.duplicateCount}, ${formatSize(s.duplicateSize)})</h3><ul>`;
-        s.duplicateFiles.forEach((f, i) => { html += `<li><span>${i+1}.</span> <a href="${f.url}" target="_blank">${f.name}</a> <span class="file-size">${f.size ? formatSize(f.size) : '?'}</span></li>`; });
-        html += `</ul></div>`;
-    }
-    if (s.successFiles.length) {
-        html += `<div class="report-section"><h3 style="color:var(--success)">✅ Скопировано (${s.successCount}, ${formatSize(s.successSize)})</h3><ul>`;
-        s.successFiles.forEach(f => { html += `<li><a href="${f.url}" target="_blank" style="font-weight:bold">${f.name}</a> <span class="file-size">${f.size ? formatSize(f.size) : '?'}</span></li>`; });
-        html += `</ul></div>`;
-    }
+    if (s.errorFiles.length) { html += `<div class="report-section"><h3 style="color:var(--error)">❌ Ошибки (${s.errorCount}, ${formatSize(s.errorSize)})</h3><ul>`; s.errorFiles.forEach((f, i) => { html += `<li><span>${i+1}.</span> <a href="${f.url}" target="_blank">${f.name}</a> <span class="file-size">${f.size ? formatSize(f.size) : '?'}</span><br><span style="color:#aaa;font-size:0.85em">Причина: ${f.reason}</span></li>`; }); html += `</ul></div>`; }
+    if (s.duplicateFiles.length) { html += `<div class="report-section"><h3 style="color:var(--warning)">🔄 Дубликаты (${s.duplicateCount}, ${formatSize(s.duplicateSize)})</h3><ul>`; s.duplicateFiles.forEach((f, i) => { html += `<li><span>${i+1}.</span> <a href="${f.url}" target="_blank">${f.name}</a> <span class="file-size">${f.size ? formatSize(f.size) : '?'}</span></li>`; }); html += `</ul></div>`; }
+    if (s.successFiles.length) { html += `<div class="report-section"><h3 style="color:var(--success)">✅ Скопировано (${s.successCount}, ${formatSize(s.successSize)})</h3><ul>`; s.successFiles.forEach(f => { html += `<li><a href="${f.url}" target="_blank" style="font-weight:bold">${f.name}</a> <span class="file-size">${f.size ? formatSize(f.size) : '?'}</span></li>`; }); html += `</ul></div>`; }
     return html;
 }
 function generateReportMarkdown() {
-    const s = state.stats;
-    const total = s.successCount + s.duplicateCount + s.errorCount;
-    const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
-    let md = `# 📄 Отчёт Yandex Saver v5.8.2\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
+    const s = state.stats; const total = s.successCount + s.duplicateCount + s.errorCount; const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
+    let md = `# 📄 Отчёт Yandex Saver v5.9\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
     md += `## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n`;
     md += `- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
     if (s.errorFiles.length) { md += `## ❌ Ошибки\n`; s.errorFiles.forEach((f,i)=>md+=`${i+1}. [${f.name}](${f.url}) | ${formatSize(f.size)} | ${f.reason}\n`); md+=`\n`; }
@@ -443,293 +448,162 @@ downloadReportBtn.addEventListener('click', () => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = `YandexSaver_Report_${new Date().toISOString().slice(0,10)}.md`;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-    log('📥 Отчёт скачан', 'success');
+    addLog('📥 Отчёт скачан', 'success');
 });
 
-// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+// ==================== 🛠️ ВСПОМОГАТЕЛЬНЫЕ ====================
 async function ensureFolderExists(path) {
-    const np = normalizePath(path);
-    if (np === '/') return true;
-    try {
-        await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-    } catch {
-        const parent = normalizePath(np.substring(0, np.lastIndexOf('/')) || '/');
-        await ensureFolderExists(parent);
-        const cr = await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } });
-        if (!cr.ok && cr.status !== 409) throw new Error(`Не создать ${np}`);
-        log(`📁 Создана: ${np}`, 'success');
-    }
+    const np = normalizePath(path); if (np === '/') return true;
+    try { await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } }); }
+    catch { const parent = normalizePath(np.substring(0, np.lastIndexOf('/')) || '/'); await ensureFolderExists(parent); const cr = await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } }); if (!cr.ok && cr.status !== 409) throw new Error(`Не создать ${np}`); addLog(`📁 Создана: ${np}`, 'success'); }
     return true;
 }
-function getDirFromPublicPath(filePath) {
-    if (!filePath || filePath === '/') return '';
-    const parts = filePath.split('/').filter(p => p && p.trim());
-    if (parts.length <= 1) return '';
-    return parts.slice(0, -1).join('/');
-}
-async function fileExistsAtPath(fullPath) {
+function getDirFromPublicPath(filePath) { if (!filePath || filePath === '/') return ''; const parts = filePath.split('/').filter(p => p && p.trim()); if (parts.length <= 1) return ''; return parts.slice(0, -1).join('/'); }
+async function fileExistsAtPath(fullPath) { try { const res = await fetch(`${API}/resources?path=${encodeURIComponent(fullPath)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } }); return res.status === 200; } catch { return false; } }
+async function updateDiskInfoDisplay() {
+    if(!TOKEN) return;
     try {
-        const res = await fetch(`${API}/resources?path=${encodeURIComponent(fullPath)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-        return res.status === 200;
-    } catch { return false; }
-}
-
-// ==================== ТРОТТЛЕР ====================
-class RequestThrottler {
-    constructor(maxPerSecond = 3) { this.maxPerSecond = maxPerSecond; this.timestamps = []; this.minInterval = 1000 / maxPerSecond; }
-    async waitIfNeeded() {
-        const now = Date.now();
-        this.timestamps = this.timestamps.filter(t => now - t < 1000);
-        if (this.timestamps.length >= this.maxPerSecond) {
-            const oldest = Math.min(...this.timestamps);
-            const waitTime = Math.max(0, 1000 - (now - oldest) + this.minInterval);
-            if (waitTime > 0) await new Promise(resolve => setTimeout(resolve, waitTime));
+        const res = await fetch(`${API}/?pretty=true`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
+        if (res.ok) {
+            const d = await res.json(); diskInfoCache = d;
+            const free = Number(d.free_space || (d.total_space - d.used_space));
+            const total = Number(d.total_space);
+            statFreeSpace.textContent = `${formatSize(free)} из ${formatSize(total)}`;
         }
-        this.timestamps.push(Date.now());
-    }
+    } catch (e) { addLog('Ошибка инфо о диске: ' + e.message, 'error'); }
 }
-const throttler = new RequestThrottler(3);
 
-// ==================== ПОВТОРНЫЕ ПОПЫТКИ ====================
+// ==================== 🔁 ТРОТТЛЕР & RETRY ====================
+class RequestThrottler { constructor(m=3){this.m=m;this.t=[];this.mi=1000/m;} async waitIfNeeded(){const n=Date.now();this.t=this.t.filter(x=>n-x<1000);if(this.t.length>=this.m){const o=Math.min(...this.t),w=Math.max(0,1000-(n-o)+this.mi);if(w>0)await new Promise(r=>setTimeout(r,w));}this.t.push(Date.now());}}
+const throttler = new RequestThrottler(3);
 async function fetchWithRetry(url, options, maxRetries = 5) {
     let lastError;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let i = 1; i <= maxRetries; i++) {
         try {
             await throttler.waitIfNeeded();
-            const response = await fetch(url, { ...options, signal: abortController?.signal });
-            if (response.ok || response.status === 202) return response;
-            if (response.status === 404 && attempt < maxRetries) {
-                const delay = Math.pow(2, attempt) * 1000;
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-            }
-            return response;
+            const r = await fetch(url, { ...options, signal: abortController?.signal });
+            if (r.ok || r.status === 202) return r;
+            if (r.status === 404 && i < maxRetries) { await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000)); continue; }
+            return r;
         } catch (e) {
             lastError = e;
-            if (attempt < maxRetries && (e.name === 'TypeError' || e.message.includes('Failed to fetch') || !navigator.onLine)) {
-                const delay = Math.pow(2, attempt) * 1000;
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-            }
+            if (i < maxRetries && (e.name === 'TypeError' || e.message.includes('Failed to fetch') || !navigator.onLine)) { await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000)); continue; }
             throw e;
         }
-    }
-    throw lastError || new Error('Неизвестная ошибка');
+    } throw lastError || new Error('Ошибка');
 }
 
-// ==================== СОХРАНЕНИЕ ФАЙЛА ====================
-async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
+// ==================== 💾 СОХРАНЕНИЕ & ОБРАБОТКА ====================
+async function savePublicFile(pk, fp, tp, fn, su) {
     if (!isRunning) throw new Error('Остановлено');
-    const fullPath = normalizePath(`${targetPath}/${fileName}`);
+    const fullPath = normalizePath(`${tp}/${fn}`);
     if (await fileExistsAtPath(fullPath)) {
-        log(`⏭ Уже существует: ${fileName}`, 'warn');
-        state.stats.duplicateCount++;
-        state.stats.duplicateFiles.push({ name: fileName, url: sourceUrl, size: 0 });
-        return { skipped: true, reason: 'exists' };
+        addLog(`⏭ Уже существует: ${fn}`, 'warn'); state.stats.duplicateCount++; state.stats.duplicateFiles.push({ name: fn, url: su, size: 0 }); return { skipped: true };
     }
-    updateStatus(`💾 ${fileName}`); log(`⬇️ Сохраняю: ${fileName}`);
-    const params = new URLSearchParams({ public_key: publicKey, path: filePathInPublic, save_path: normalizePath(targetPath), name: fileName });
-    const response = await fetchWithRetry(`${API}/public/resources/save-to-disk?${params}`, { method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` } });
-    if (response.status === 202) { log(`⏳ В очереди: ${fileName}`, 'info'); state.stats.successCount++; state.stats.successFiles.push({ name: fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 }); return { saved: true }; }
-    if (!response.ok) {
-        const t = await response.text().catch(() => '');
-        state.stats.errorCount++;
-        state.stats.errorFiles.push({ name: fileName, url: sourceUrl, reason: `API ${response.status}: ${t.slice(0,100)}`, size: 0 });
-        state.stats.failedItems.push({ sourceUrl, publicPath: filePathInPublic, fileName, targetPath: fullPath, errorCode: response.status, errorMessage: t.slice(0,200), attempt: 5, maxRetries: 5 });
-        throw new Error(`API ${response.status}: ${t.slice(0,200)}`);
-    }
-    const result = await response.json();
-    if (result.href || result.path || result.name) {
-        log(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`, 'success');
-        state.stats.successCount++; state.stats.successFiles.push({ name: result.name || fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 });
-        return { saved: true };
-    }
+    updateStatus(`💾 ${fn}`); addLog(`⬇️ Сохраняю: ${fn}`);
+    const p = new URLSearchParams({ public_key: pk, path: fp, save_path: normalizePath(tp), name: fn });
+    const r = await fetchWithRetry(`${API}/public/resources/save-to-disk?${p}`, { method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` } });
+    if (r.status === 202) { addLog(`⏳ В очереди: ${fn}`, 'info'); state.stats.successCount++; state.stats.successFiles.push({ name: fn, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 }); return { saved: true }; }
+    if (!r.ok) { const t = await r.text().catch(() => ''); state.stats.errorCount++; state.stats.errorFiles.push({ name: fn, url: su, reason: `API ${r.status}: ${t.slice(0,100)}`, size: 0 }); failedItems.push({ sourceUrl: su, publicPath: fp, fileName: fn, targetPath: fullPath, errorCode: r.status, errorMessage: t.slice(0,200) }); throw new Error(`API ${r.status}`); }
+    const res = await r.json(); if (res.href || res.path || res.name) { addLog(`✅ Сохранено: ${normalizePath(`${tp}/${res.name || fn}`)}`, 'success'); state.stats.successCount++; state.stats.successFiles.push({ name: res.name || fn, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 }); return { saved: true }; }
     throw new Error('Неожиданный ответ API');
 }
-
-// ==================== ОБРАБОТКА ПАПОК (РЕКУРСИВНАЯ) ====================
-async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl) {
+async function processPublicFolder(pk, tb, pfn, su) {
     if (!isRunning) throw new Error('Остановлено');
-    const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
-    log(`📁 Обработка папки "${publicFolderName}" → ${rootTargetPath}`);
-    updateStatus(`📂 ${publicFolderName}`);
-    state.stats.foldersProcessed++;
-    await ensureFolderExists(rootTargetPath);
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
+    const rtp = normalizePath(`${tb}/${pfn}`); addLog(`📁 Обработка "${pfn}" → ${rtp}`); updateStatus(`📂 ${pfn}`); state.stats.foldersProcessed++; await ensureFolderExists(rtp);
+    let url = `${API}/public/resources?public_key=${encodeURIComponent(pk)}&limit=1000`;
     while (url && isRunning) {
-        const resp = await fetchWithRetry(url, { signal: abortController?.signal });
-        if (!resp.ok) throw new Error(`Не прочитать папку: ${resp.status}`);
-        const data = await resp.json();
-        const items = data._embedded?.items || data.items || [];
+        const resp = await fetchWithRetry(url, { signal: abortController?.signal }); if (!resp.ok) throw new Error(`Не прочитать папку: ${resp.status}`);
+        const data = await resp.json(); const items = data._embedded?.items || data.items || [];
         for (const item of items) {
             if (!isRunning) throw new Error('Остановлено');
-            if (processedPublicPaths.has(item.path)) { log(`⚠️ Пропуск: ${item.path}`, 'warn'); continue; }
+            if (processedPublicPaths.has(item.path)) { addLog(`⚠️ Пропуск: ${item.path}`, 'warn'); continue; }
             processedPublicPaths.add(item.path);
-            const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-            const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
+            const rel = item.path.startsWith('/') ? item.path.substring(1) : item.path; const itp = normalizePath(`${rtp}/${rel}`);
             if (item.type === 'file') {
                 state.stats.totalFiles++; state.stats.totalFilesSize += (item.size || 0);
-                const dirInPublic = getDirFromPublicPath(item.path);
-                const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-                try { await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); } catch (e) { log(`❌ Ошибка ${item.name}: ${e.message}`, 'error'); }
+                const d = getDirFromPublicPath(item.path); const ftp = d ? normalizePath(`${rtp}/${d}`) : rtp;
+                try { await savePublicFile(pk, item.path, ftp, item.name, su); } catch (e) { addLog(`❌ Ошибка ${item.name}: ${e.message}`, 'error'); }
             } else if (item.type === 'dir') {
-                await ensureFolderExists(itemTargetPath); log(`📁 Создана: ${itemTargetPath}`);
-                const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-                await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
+                await ensureFolderExists(itp); addLog(`📁 Создана: ${itp}`);
+                await processSubFolderContents(`${API}/public/resources?public_key=${encodeURIComponent(pk)}&path=${encodeURIComponent(item.path)}&limit=1000`, pk, rtp, su);
             }
         }
         url = data._embedded?.next || data.next || null;
     }
 }
-async function processSubFolderContents(url, publicKey, rootTargetPath, sourceUrl) {
-    if (!isRunning) return;
-    const resp = await fetchWithRetry(url, { signal: abortController?.signal });
-    if (!resp.ok) throw new Error(`Не прочитать подпапку: ${resp.status}`);
+async function processSubFolderContents(url, pk, rtp, su) {
+    if (!isRunning) return; const resp = await fetchWithRetry(url, { signal: abortController?.signal }); if (!resp.ok) throw new Error(`Не прочитать подпапку`);
     const data = await resp.json(); const items = data._embedded?.items || data.items || [];
     for (const item of items) {
-        if (!isRunning) throw new Error('Остановлено');
-        if (processedPublicPaths.has(item.path)) continue;
-        processedPublicPaths.add(item.path);
+        if (!isRunning) throw new Error('Остановлено'); if (processedPublicPaths.has(item.path)) continue; processedPublicPaths.add(item.path);
         if (item.type === 'file') {
             state.stats.totalFiles++; state.stats.totalFilesSize += (item.size || 0);
-            const dirInPublic = getDirFromPublicPath(item.path);
-            const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-            try { await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); } catch (e) { log(`❌ Ошибка ${item.name}: ${e.message}`, 'error'); }
+            const d = getDirFromPublicPath(item.path); const ftp = d ? normalizePath(`${rtp}/${d}`) : rtp;
+            try { await savePublicFile(pk, item.path, ftp, item.name, su); } catch (e) { addLog(`❌ Ошибка ${item.name}: ${e.message}`, 'error'); }
         } else if (item.type === 'dir') {
-            const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-            const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
-            await ensureFolderExists(itemTargetPath); log(`📁 Создана: ${itemTargetPath}`);
-            const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-            await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
+            const rel = item.path.startsWith('/') ? item.path.substring(1) : item.path; const itp = normalizePath(`${rtp}/${rel}`); await ensureFolderExists(itp); addLog(`📁 Создана: ${itp}`);
+            await processSubFolderContents(`${API}/public/resources?public_key=${encodeURIComponent(pk)}&path=${encodeURIComponent(item.path)}&limit=1000`, pk, rtp, su);
         }
     }
-    const nextUrl = data._embedded?.next || data.next || null;
-    if (nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath, sourceUrl);
+    const n = data._embedded?.next || data.next || null; if (n && isRunning) await processSubFolderContents(n, pk, rtp, su);
 }
-
-// ==================== ОБРАБОТКА ОДНОЙ ССЫЛКИ ====================
-async function processPublicLink(publicUrl, targetBasePath) {
+async function processPublicLink(pk, tb) {
     processedPublicPaths.clear();
-    const metaResp = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, { signal: abortController?.signal });
-    if (!metaResp.ok) {
-        state.stats.errorCount++;
-        state.stats.errorFiles.push({ name: '(корень)', url: publicUrl, reason: `Недоступна публичная ссылка (${metaResp.status})`, size: 0 });
-        state.stats.failedItems.push({ sourceUrl: publicUrl, publicPath: '/', fileName: '(корень)', targetPath: TARGET_FOLDER, errorCode: metaResp.status, errorMessage: 'Недоступна публичная ссылка', attempt: 5, maxRetries: 5 });
-        throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
-    }
-    const meta = await metaResp.json();
-    if (meta.type === 'file') {
-        log(`📄 Файл: ${meta.name}`);
-        state.stats.totalFiles++; state.stats.totalFilesSize += (meta.size || 0);
-        return (await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name, publicUrl))?.skipped ? { skipped: true } : { saved: true };
-    } else if (meta.type === 'dir' || meta._embedded?.items) {
-        const publicFolderName = meta.name || 'Без имени';
-        log(`📁 Папка: "${publicFolderName}"`);
-        await processPublicFolder(publicUrl, targetBasePath, publicFolderName, publicUrl);
-        return { saved: true };
-    } else throw new Error(`Неизвестный тип: ${meta.type}`);
+    const mr = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(pk)}`, { signal: abortController?.signal });
+    if (!mr.ok) { state.stats.errorCount++; state.stats.errorFiles.push({ name: '(корень)', url: pk, reason: `Недоступна (${mr.status})`, size: 0 }); failedItems.push({ sourceUrl: pk, publicPath: '/', fileName: '(корень)', targetPath: TARGET_FOLDER, errorCode: mr.status, errorMessage: 'Недоступна' }); throw new Error(`Недоступно (${mr.status})`); }
+    const m = await mr.json();
+    if (m.type === 'file') { addLog(`📄 Файл: ${m.name}`); state.stats.totalFiles++; state.stats.totalFilesSize += (m.size || 0); return (await savePublicFile(pk, m.path || `/${m.name}`, tb, m.name, pk))?.skipped ? { skipped: true } : { saved: true }; }
+    else if (m.type === 'dir' || m._embedded?.items) { addLog(`📁 Папка: "${m.name || 'Без имени'}"`); await processPublicFolder(pk, tb, m.name || 'Без имени', pk); return { saved: true }; }
+    else throw new Error(`Неизвестный тип: ${m.type}`);
+}
+async function calculatePublicFolderSize(pk, limit = 1000) {
+    let s = 0, c = 0, u = `${API}/public/resources?public_key=${encodeURIComponent(pk)}&limit=${limit}`;
+    while (u && isRunning) { try { await throttler.waitIfNeeded(); const r = await fetchWithRetry(u); if (!r.ok) break; const d = await r.json(); for (const i of (d._embedded?.items || d.items || [])) { if (i.type === 'file' && i.size) { s += i.size; c++; } } u = d._embedded?.next || d.next || null; } catch { break; } }
+    return { totalSize: s, fileCount: c };
 }
 
-// ==================== РАСЧЁТ РАЗМЕРА ====================
-async function calculatePublicFolderSize(publicKey, limit = 1000) {
-    let totalSize = 0; let fileCount = 0;
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=${limit}`;
-    while (url && isRunning) {
-        try {
-            await throttler.waitIfNeeded();
-            const resp = await fetchWithRetry(url);
-            if (!resp.ok) break;
-            const data = await resp.json();
-            const items = data._embedded?.items || data.items || [];
-            for (const item of items) { if (item.type === 'file' && item.size) { totalSize += item.size; fileCount++; } }
-            url = data._embedded?.next || data.next || null;
-        } catch (e) { break; }
-    }
-    return { totalSize, fileCount };
-}
-
-// ==================== ОСНОВНОЙ ПРОЦЕСС ====================
+// ==================== 🚀 ОСНОВНОЙ ПРОЦЕСС ====================
 async function startProcess() {
-    // Сброс статистики
-    state.stats = { totalLinks:0, foldersProcessed:0, totalFiles:0, totalFilesSize:0, successCount:0, successSize:0, successFiles:[], duplicateCount:0, duplicateSize:0, duplicateFiles:[], errorCount:0, errorSize:0, errorFiles:[], failedItems:[] };
-    
-    const raw = linksInput.value.trim(); 
-    if (!raw) { alert('⚠️ Вставьте ссылки'); return; }
-    const links = parseLinks(raw); 
-    if (!links.length) { alert('❌ Нет корректных ссылок'); return; }
-    state.stats.totalLinks = links.length;
-    
-    if (!TARGET_FOLDER) { 
-        TARGET_FOLDER = normalizePath(targetPathInput.value.trim() || '/saved-materials'); 
-        targetPathInput.value = TARGET_FOLDER; 
-    }
+    state.stats = { totalLinks:0, foldersProcessed:0, totalFiles:0, totalFilesSize:0, successCount:0, successSize:0, successFiles:[], duplicateCount:0, duplicateSize:0, duplicateFiles:[], errorCount:0, errorSize:0, errorFiles:[] };
+    failedItems = [];
+    const raw = linksInput.value.trim(); if (!raw) return alert('⚠️ Вставьте ссылки');
+    const links = parseLinks(raw); if (!links.length) return alert('❌ Нет корректных ссылок');
+    state.stats.totalLinks = links.length; if (!TARGET_FOLDER) TARGET_FOLDER = normalizePath(targetPathInput.value.trim() || '/saved-materials');
     await updateDiskInfoDisplay();
-    
-    // Сканирование размера
     let totalRequiredSize = 0;
-    for (const link of links) {
-        try {
-            await throttler.waitIfNeeded();
-            const metaResp = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(link)}&limit=1000`);
-            if (!metaResp.ok) continue;
-            const meta = await metaResp.json();
-            if (meta.type === 'file' && meta.size) totalRequiredSize += meta.size;
-            else if (meta.type === 'dir' || meta._embedded?.items) { const sizeInfo = await calculatePublicFolderSize(link); totalRequiredSize += sizeInfo.totalSize; }
-        } catch (e) { log(`⚠️ Не просканировать ${link}: ${e.message}`, 'warn'); }
-    }
+    for (const link of links) { try { await throttler.waitIfNeeded(); const mr = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(link)}&limit=1000`); if (!mr.ok) continue; const m = await mr.json(); if (m.type === 'file' && m.size) totalRequiredSize += m.size; else if (m.type === 'dir' || m._embedded?.items) { const si = await calculatePublicFolderSize(link); totalRequiredSize += si.totalSize; } } catch (e) { addLog(`⚠️ Не просканировать ${link}: ${e.message}`, 'warn'); } }
     statRequiredSize.textContent = formatSize(totalRequiredSize);
-    
     isRunning = true; abortController = new AbortController(); processedPublicPaths.clear();
     startBtn.disabled = true; stopBtn.disabled = false; reportButtons.classList.add('hidden');
-    updateStatus('Выполнение...', 'status-running'); log('🚀 Запуск...', 'info');
-    
+    updateStatus('Выполнение...', 'status-running'); addLog('🚀 Запуск...', 'info');
     await ensureFolderExists(TARGET_FOLDER);
-    
     let success = 0, skipped = 0, errors = 0;
     for (let i = 0; i < links.length; i++) {
-        if (!isRunning) break;
-        updateStatus(`⏳ ${i+1}/${links.length}`);
-        try {
-            const result = await processPublicLink(links[i], TARGET_FOLDER);
-            if (result?.skipped) skipped++; else success++;
-            log(`✅ Ссылка #${i+1}`, 'success');
-        } catch (e) {
-            if (e.message === 'Остановлено') { log('⏹ Остановлено', 'warn'); break; }
-            errors++; log(`❌ #${i+1}: ${e.message}`, 'error');
-        }
+        if (!isRunning) break; updateStatus(`⏳ ${i+1}/${links.length}`);
+        try { const res = await processPublicLink(links[i], TARGET_FOLDER); if (res?.skipped) skipped++; else success++; addLog(`✅ Ссылка #${i+1}`, 'success'); }
+        catch (e) { if (e.message === 'Остановлено') { addLog('⏹ Остановлено', 'warn'); break; } errors++; addLog(`❌ #${i+1}: ${e.message}`, 'error'); }
         await new Promise(r => setTimeout(r, 500));
     }
-    
-    isRunning = false; startBtn.disabled = false; stopBtn.disabled = true;
-    updateStartButtonState(); // Возвращаем исходное состояние
-    if (state.stats.errorFiles.length > 0 || state.stats.failedItems.length > 0) reportButtons.classList.remove('hidden');
-    updateStatus('Завершено', 'status-success'); log('✅ Готово. Отчёты доступны.', 'success');
+    isRunning = false; startBtn.disabled = false; stopBtn.disabled = true; updateStartButtonState();
+    if (state.stats.errorFiles.length > 0 || failedItems.length > 0) reportButtons.classList.remove('hidden');
+    updateStatus('Завершено', 'status-success'); addLog('✅ Готово. Отчёты доступны.', 'success');
 }
-async function updateDiskInfoDisplay() { await fetchDiskInfo(); }
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 window.addEventListener('DOMContentLoaded', async () => {
-    targetPathInput.value = TARGET_FOLDER;
-    statTargetFolder.textContent = TARGET_FOLDER;
-    
-    if (TOKEN) {
-        log('Найден сохранённый токен, проверяем...', 'info');
-        await verifyTokenAndProceed(TOKEN);
-    } else {
-        log('Требуется авторизация', 'info');
-        updateStatus('Не авторизован', 'status-idle');
-    }
-    
+    targetPathInput.value = TARGET_FOLDER; statTargetFolder.textContent = TARGET_FOLDER;
+    if (TOKEN) { addLog('🔍 Токен найден в хранилище, проверяю...', 'info'); await verifyTokenAndProceed(TOKEN).catch(e => { addLog(`⚠️ Фоновая проверка: ${e.message}`, 'warn'); }); }
+    else { addLog('⚠️ Требуется авторизация', 'info'); updateStatus('Не авторизован', 'status-idle'); }
     authBtn.addEventListener('click', startOAuthPopup);
     logoutBtn.addEventListener('click', logout);
     browseBtn.addEventListener('click', showFolderBrowser);
     btnNextLinks.addEventListener('click', () => goToStep('stepLinks'));
     startBtn.addEventListener('click', startProcess);
     stopBtn.addEventListener('click', () => { if (abortController) abortController.abort(); });
-    copyLogBtn.addEventListener('click', () => { if(state.logs.length) navigator.clipboard.writeText(state.logs.join('\n')).then(()=>log('📋 Лог скопирован','success')); });
-    
-    log('Система инициализирована. Подключите Яндекс.Диск для начала работы.', 'info');
-    updateStartButtonState(); // 🔥 Начальная проверка
+    copyLogBtn.addEventListener('click', () => { if(state.logs.length) navigator.clipboard.writeText(state.logs.join('\n')).then(()=>addLog('📋 Лог скопирован','success')); });
+    updateStartButtonState();
+    addLog('Система инициализирована.', 'info');
 });
 </script>
 </body>

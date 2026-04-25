@@ -1,14 +1,13 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Yandex Saver v5.9.1 Qwen Web dev</title>
+    <title>Yandex Saver v5.9.1</title>
     <style>
         :root {
             --bg: #121212; --surface: #1e1e1e; --border: #333; --text: #e0e0e0;
             --accent: #4a90d9; --success: #4caf50; --warning: #ff9800; --error: #f44336;
-            --text-light: #aaa;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; padding: 16px; }
@@ -68,7 +67,7 @@
 </head>
 <body>
 <div class="container">
-    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9.1 Qwen web dev</span></h1>
+    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9.1</span></h1>
     <p class="subtitle">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
 
     <div id="userBlock" class="user-block hidden">
@@ -259,7 +258,7 @@ function storeToken(token) {
 }
 TOKEN = getStoredToken();
 
-// ==================== АВТОРИЗАЦИЯ (РАБОЧАЯ ВЕРСИЯ 5.5) ====================
+// ==================== АВТОРИЗАЦИЯ (ВЕРСИЯ 5.5) ====================
 function startOAuthPopup() {
     updateStatus('Открытие окна авторизации...', 'status-running');
     const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
@@ -314,6 +313,7 @@ function onAuthSuccess() {
     authStatus.className = 'status-badge status-success';
     updateStatus('Авторизация успешна', 'status-success');
     goToStep('stepFolder');
+    // 🔥 ОБНОВЛЕНИЕ СТАТИСТИКИ ДИСКА ПРИ ВХОДЕ
     updateDiskInfoDisplay();
 }
 
@@ -325,6 +325,7 @@ function logout() {
     authStatus.textContent = '⏳ Ожидание';
     authStatus.className = 'status-badge status-idle';
     logArea.innerHTML = ''; state.logs = [];
+    statFreeSpace.textContent = '—';
     updateStatus('Вы вышли', 'status-idle');
     goToStep('stepAuth');
     log('👋 Сессия завершена');
@@ -333,17 +334,33 @@ function logout() {
     diskInfoCache = null;
 }
 
-async function updateDiskInfoDisplay() {
-    if (!TOKEN) return;
+// ==================== 🔥 СТАТИСТИКА ДИСКА ====================
+async function getDiskInfo() {
     try {
         await throttler.waitIfNeeded();
         const res = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
         if (res.ok) {
             const data = await res.json();
-            diskInfoCache = { total_space: Number(data.total_space || 0), used_space: Number(data.used_space || 0), free_space: Number(data.free_space || 0) };
-            statFreeSpace.textContent = formatSize(diskInfoCache.free_space);
+            // Яндекс отдает free_space, total_space, used_space
+            return {
+                total_space: Number(data.total_space || 0),
+                used_space: Number(data.used_space || 0),
+                free_space: Number(data.free_space || 0)
+            };
         }
-    } catch (e) { log(`Ошибка инфо о диске: ${e.message}`, 'error'); }
+        throw new Error('Не удалось получить данные');
+    } catch (e) {
+        log(`Ошибка получения инфо о диске: ${e.message}`, 'error');
+        return { total_space: 0, used_space: 0, free_space: 0 };
+    }
+}
+
+async function updateDiskInfoDisplay() {
+    if (!TOKEN) return;
+    log('🔄 Обновляю информацию о диске...', 'info');
+    diskInfoCache = await getDiskInfo();
+    statFreeSpace.textContent = formatSize(diskInfoCache.free_space);
+    log(`📊 Диск: Всего ${formatSize(diskInfoCache.total_space)}, Свободно ${formatSize(diskInfoCache.free_space)}`, 'success');
 }
 
 // ==================== ВЫБОР ПАПКИ (ВЕРСИЯ 5.5) ====================
@@ -474,9 +491,10 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
 
     if (await fileExistsAtPath(fullPath)) {
         log(`⏭ Уже существует: ${fileName}`, 'warn');
+        const fileSize = await getFileSize(publicKey, filePathInPublic);
         state.stats.duplicateCount++;
-        state.stats.duplicateSize += (await getFileSize(publicKey, filePathInPublic)) || 0;
-        state.stats.duplicateFiles.push({ name: fileName, url: sourceUrl, size: state.stats.duplicateFiles.length > 0 ? state.stats.duplicateFiles[state.stats.duplicateFiles.length - 1]?.size || 0 : 0 });
+        state.stats.duplicateSize += fileSize;
+        state.stats.duplicateFiles.push({ name: fileName, url: sourceUrl, size: fileSize });
         return { skipped: true, reason: 'exists' };
     }
 
@@ -498,7 +516,7 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
 
     if (response.status === 202) {
         log(`⏳ В очереди: ${fileName}`, 'info');
-        const fileSize = (await getFileSize(publicKey, filePathInPublic)) || 0;
+        const fileSize = await getFileSize(publicKey, filePathInPublic);
         state.stats.successCount++;
         state.stats.successSize += fileSize;
         state.stats.successFiles.push({ name: fileName, url: `https://disk.yandex.ru/client/disk${fullPath}`, size: fileSize });
@@ -507,7 +525,7 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
 
     if (!response.ok) {
         const t = await response.text().catch(() => '');
-        const fileSize = (await getFileSize(publicKey, filePathInPublic)) || 0;
+        const fileSize = await getFileSize(publicKey, filePathInPublic);
         state.stats.errorCount++;
         state.stats.errorSize += fileSize;
         state.stats.errorFiles.push({ name: fileName, url: sourceUrl, reason: `API ${response.status}: ${t.slice(0, 200)}`, size: fileSize });
@@ -517,7 +535,7 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
     const result = await response.json();
     if (result.href || result.path || result.name) {
         const savedPath = normalizePath(`${targetPath}/${result.name || fileName}`);
-        const fileSize = (await getFileSize(publicKey, filePathInPublic)) || 0;
+        const fileSize = await getFileSize(publicKey, filePathInPublic);
         state.stats.successCount++;
         state.stats.successSize += fileSize;
         state.stats.successFiles.push({ name: fileName, url: `https://disk.yandex.ru/client/disk${savedPath}`, size: fileSize });
@@ -700,7 +718,7 @@ function generateReportMarkdown() {
     const s = state.stats;
     const total = s.successCount + s.duplicateCount + s.errorCount;
     const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
-    let md = `# 📄 Отчёт Yandex Saver v5.9\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
+    let md = `# 📄 Отчёт Yandex Saver v5.9.1\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
     if (s.errorFiles.length) { md += `## ❌ Ошибки (${s.errorCount}, ${formatSize(s.errorSize)})\n`; s.errorFiles.forEach((f, i) => md += `${i + 1}. [${f.name}](${f.url}) | ${f.size ? formatSize(f.size) : '0 Б'} | ${f.reason}\n`); md += '\n'; }
     if (s.duplicateFiles.length) { md += `## 🔄 Дубликаты (${s.duplicateCount}, ${formatSize(s.duplicateSize)})\n`; s.duplicateFiles.forEach((f, i) => md += `${i + 1}. [${f.name}](${f.url}) | ${f.size ? formatSize(f.size) : '0 Б'}\n`); md += '\n'; }
     if (s.successFiles.length) { md += `## ✅ Скопировано (${s.successCount}, ${formatSize(s.successSize)})\n`; s.successFiles.forEach(f => md += `- [${f.name}](${f.url})\n`); }
@@ -735,7 +753,9 @@ async function startProcess() {
         errorCount: 0, errorSize: 0, errorFiles: []
     };
 
+    // 🔥 ОБНОВЛЯЕМ СТАТИСТИКУ ДИСКА ПЕРЕД СТАРТОМ
     await updateDiskInfoDisplay();
+    
     updateStatus('⏳ Сканирую размер...', 'status-running');
     log('🔍 Сканирую публичные ресурсы для расчёта размера...');
 
@@ -843,4 +863,3 @@ window.addEventListener('DOMContentLoaded', async () => {
 </script>
 </body>
 </html>
-

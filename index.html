@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Yandex Saver v5.9.1</title>
+    <title>Yandex Saver v5.9.2</title>
     <style>
         :root {
             --bg: #121212; --surface: #1e1e1e; --border: #333; --text: #e0e0e0;
@@ -31,7 +31,7 @@
         .drop-zone.dragover { border-color: var(--accent); background: #2a2a3a; }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 15px 0; }
         .stat-card { background: #2a2a2a; padding: 10px; border-radius: 6px; text-align: center; }
-        .stat-card .value { font-size: 1.2em; font-weight: bold; color: var(--accent); }
+        .stat-card .value { font-size: 1.1em; font-weight: bold; color: var(--accent); }
         .stat-card .label { font-size: 0.8em; color: #888; margin-top: 4px; }
         .log-area { height: 200px; overflow-y: auto; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.85em; line-height: 1.4; }
         .log-area p { margin: 2px 0; white-space: pre-wrap; }
@@ -67,7 +67,7 @@
 </head>
 <body>
 <div class="container">
-    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9.1</span></h1>
+    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9.2</span></h1>
     <p class="subtitle">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
 
     <div id="userBlock" class="user-block hidden">
@@ -105,7 +105,8 @@
         <div class="stats-grid">
             <div class="stat-card"><div class="value" id="statTotalLinks">0</div><div class="label">Найдено ссылок</div></div>
             <div class="stat-card"><div class="value" id="statTargetFolder">/saved-materials</div><div class="label">Куда сохраняем</div></div>
-            <div class="stat-card"><div class="value" id="statFreeSpace">—</div><div class="label">Свободно на диске</div></div>
+            <!-- ИЗМЕНЕНИЕ: Метка обновлена на "Свободно из всего" -->
+            <div class="stat-card"><div class="value" id="statFreeSpace">—</div><div class="label">Свободно из всего</div></div>
             <div class="stat-card"><div class="value" id="statRequiredSize">—</div><div class="label">Примерный объём</div></div>
         </div>
     </div>
@@ -334,33 +335,43 @@ function logout() {
     diskInfoCache = null;
 }
 
-// ==================== 🔥 СТАТИСТИКА ДИСКА ====================
+// ==================== 🔥 СТАТИСТИКА ДИСКА (ПРАВИЛЬНАЯ) ====================
 async function getDiskInfo() {
     try {
         await throttler.waitIfNeeded();
-        const res = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
-        if (res.ok) {
-            const data = await res.json();
-            // Яндекс отдает free_space, total_space, used_space
-            return {
-                total_space: Number(data.total_space || 0),
-                used_space: Number(data.used_space || 0),
-                free_space: Number(data.free_space || 0)
-            };
+        const response = await fetch(`${API}/`, {
+            headers: { 'Authorization': `OAuth ${TOKEN}` }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Ошибка API: ${response.status}`);
         }
-        throw new Error('Не удалось получить данные');
-    } catch (e) {
-        log(`Ошибка получения инфо о диске: ${e.message}`, 'error');
-        return { total_space: 0, used_space: 0, free_space: 0 };
+
+        const data = await response.json();
+
+        return {
+            total: Number(data.total_space),
+            used: Number(data.used_space),
+            free: Number(data.free_space)
+        };
+    } catch (error) {
+        log('Ошибка получения информации о диске: ' + error.message, 'error');
+        return null;
     }
 }
 
 async function updateDiskInfoDisplay() {
     if (!TOKEN) return;
     log('🔄 Обновляю информацию о диске...', 'info');
-    diskInfoCache = await getDiskInfo();
-    statFreeSpace.textContent = formatSize(diskInfoCache.free_space);
-    log(`📊 Диск: Всего ${formatSize(diskInfoCache.total_space)}, Свободно ${formatSize(diskInfoCache.free_space)}`, 'success');
+    const info = await getDiskInfo();
+    
+    if (info) {
+        diskInfoCache = info;
+        // Формируем строку "Свободно из Всего"
+        const freeStr = formatSize(info.free);
+        const totalStr = formatSize(info.total);
+        statFreeSpace.textContent = `${freeStr} из ${totalStr}`;
+    }
 }
 
 // ==================== ВЫБОР ПАПКИ (ВЕРСИЯ 5.5) ====================
@@ -718,7 +729,7 @@ function generateReportMarkdown() {
     const s = state.stats;
     const total = s.successCount + s.duplicateCount + s.errorCount;
     const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
-    let md = `# 📄 Отчёт Yandex Saver v5.9.1\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
+    let md = `# 📄 Отчёт Yandex Saver v5.9.2\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
     if (s.errorFiles.length) { md += `## ❌ Ошибки (${s.errorCount}, ${formatSize(s.errorSize)})\n`; s.errorFiles.forEach((f, i) => md += `${i + 1}. [${f.name}](${f.url}) | ${f.size ? formatSize(f.size) : '0 Б'} | ${f.reason}\n`); md += '\n'; }
     if (s.duplicateFiles.length) { md += `## 🔄 Дубликаты (${s.duplicateCount}, ${formatSize(s.duplicateSize)})\n`; s.duplicateFiles.forEach((f, i) => md += `${i + 1}. [${f.name}](${f.url}) | ${f.size ? formatSize(f.size) : '0 Б'}\n`); md += '\n'; }
     if (s.successFiles.length) { md += `## ✅ Скопировано (${s.successCount}, ${formatSize(s.successSize)})\n`; s.successFiles.forEach(f => md += `- [${f.name}](${f.url})\n`); }
@@ -778,12 +789,17 @@ async function startProcess() {
     statRequiredSize.textContent = formatSize(totalRequiredSize);
     log(`📦 Общий размер: ${formatSize(totalRequiredSize)}`);
 
-    const freeSpace = diskInfoCache?.free_space || 0;
+    // 🔥 ПРОВЕРКА НА СВОБОДНОЕ МЕСТО
+    const freeSpace = diskInfoCache?.free || 0;
     if (totalRequiredSize > freeSpace && freeSpace > 0) {
-        if (!confirm(`⚠️ Недостаточно места!\nНужно: ${formatSize(totalRequiredSize)}\nСвободно: ${formatSize(freeSpace)}\n\nПродолжить?`)) {
-            updateStatus('❌ Отменено', 'status-stopped');
+        const confirm = window.confirm(`⚠️ Недостаточно места!\n\nТребуется: ${formatSize(totalRequiredSize)}\nСвободно: ${formatSize(freeSpace)}\n\nПродолжить сохранение?`);
+        if (!confirm) {
+            updateStatus('❌ Отменено пользователем', 'status-stopped');
             return;
         }
+        log('⚠️ Пользователь подтвердил продолжение при нехватке места', 'warn');
+    } else if (freeSpace > 0) {
+        log(`✅ Места достаточно: ${formatSize(freeSpace)} свободно`, 'success');
     }
 
     isRunning = true;
@@ -863,3 +879,4 @@ window.addEventListener('DOMContentLoaded', async () => {
 </script>
 </body>
 </html>
+

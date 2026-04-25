@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Yandex Saver v5.9.2</title>
+    <title>Yandex Saver v6.0</title>
     <style>
         :root {
             --bg: #121212; --surface: #1e1e1e; --border: #333; --text: #e0e0e0;
@@ -67,7 +67,7 @@
 </head>
 <body>
 <div class="container">
-    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9.2</span></h1>
+    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v6.0</span></h1>
     <p class="subtitle">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
 
     <div id="userBlock" class="user-block hidden">
@@ -108,6 +108,8 @@
             <!-- ИЗМЕНЕНИЕ: Метка обновлена на "Свободно из всего" -->
             <div class="stat-card"><div class="value" id="statFreeSpace">—</div><div class="label">Свободно из всего</div></div>
             <div class="stat-card"><div class="value" id="statRequiredSize">—</div><div class="label">Примерный объём</div></div>
+            <!-- ДОБАВЛЕНО: Отображение скопированного объема -->
+            <div class="stat-card"><div class="value" id="statCopiedSize">0 Б</div><div class="label">Скопировано</div></div>
         </div>
     </div>
 
@@ -146,6 +148,7 @@
 const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
 const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
 const API = 'https://cloud-api.yandex.net/v1/disk';
+const APP_VERSION = 'v6.0';
 
 // ==================== STATE ====================
 let TOKEN = sessionStorage.getItem('ydisk_token') || '';
@@ -176,7 +179,7 @@ const targetPathInput = el('targetFolderPath'), browseBtn = el('browseBtn'), fol
 const btnNextLinks = el('btnNextLinks');
 const linksInput = el('linksInput'), dropZone = el('dropZone'), fileInput = el('fileInput');
 const statTotalLinks = el('statTotalLinks'), statTargetFolder = el('statTargetFolder');
-const statFreeSpace = el('statFreeSpace'), statRequiredSize = el('statRequiredSize');
+const statFreeSpace = el('statFreeSpace'), statRequiredSize = el('statRequiredSize'), statCopiedSize = el('statCopiedSize');
 const startBtn = el('startBtn'), stopBtn = el('stopBtn');
 const reportButtons = el('reportButtons'), viewReportBtn = el('viewReportBtn'), downloadReportBtn = el('downloadReportBtn');
 const logArea = el('logArea'), copyLogBtn = el('copyLogBtn'), statusBadge = el('statusBadge');
@@ -204,12 +207,14 @@ function goToStep(stepId) {
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
     el(stepId).classList.add('active');
 }
+
 function formatSize(bytes) {
     if (bytes == null || bytes === 0) return '0 Б';
     const k = 1024, sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+
 function normalizePath(p) {
     if (!p) return '/';
     return p.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
@@ -327,6 +332,7 @@ function logout() {
     authStatus.className = 'status-badge status-idle';
     logArea.innerHTML = ''; state.logs = [];
     statFreeSpace.textContent = '—';
+    statCopiedSize.textContent = '0 Б';
     updateStatus('Вы вышли', 'status-idle');
     goToStep('stepAuth');
     log('👋 Сессия завершена');
@@ -335,7 +341,7 @@ function logout() {
     diskInfoCache = null;
 }
 
-// ==================== 🔥 СТАТИСТИКА ДИСКА (ПРАВИЛЬНАЯ) ====================
+// ==================== 🔥 СТАТИСТИКА ДИСКА (ИСПРАВЛЕНО ПО ПРИМЕРУ ЯНДЕКСА) ====================
 async function getDiskInfo() {
     try {
         await throttler.waitIfNeeded();
@@ -349,10 +355,11 @@ async function getDiskInfo() {
 
         const data = await response.json();
 
+        // ЯНДЕКС ДИСК API ВОЗВРАЩАЕТ ЭТИ ПОЛЯ В БАЙТАХ
         return {
-            total: Number(data.total_space),
-            used: Number(data.used_space),
-            free: Number(data.free_space)
+            total: Number(data.total_space) || 0,
+            used: Number(data.used_space) || 0,
+            free: Number(data.free_space) || 0
         };
     } catch (error) {
         log('Ошибка получения информации о диске: ' + error.message, 'error');
@@ -371,6 +378,7 @@ async function updateDiskInfoDisplay() {
         const freeStr = formatSize(info.free);
         const totalStr = formatSize(info.total);
         statFreeSpace.textContent = `${freeStr} из ${totalStr}`;
+        log(`📊 Диск: Свободно ${freeStr} из ${totalStr}`, 'success');
     }
 }
 
@@ -531,6 +539,9 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
         state.stats.successCount++;
         state.stats.successSize += fileSize;
         state.stats.successFiles.push({ name: fileName, url: `https://disk.yandex.ru/client/disk${fullPath}`, size: fileSize });
+        
+        // 🔥 ОБНОВЛЯЕМ ОТОБРАЖЕНИЕ СКОПИРОВАННОГО ОБЪЕМА
+        updateCopiedSizeDisplay();
         return { saved: true };
     }
 
@@ -550,6 +561,10 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
         state.stats.successCount++;
         state.stats.successSize += fileSize;
         state.stats.successFiles.push({ name: fileName, url: `https://disk.yandex.ru/client/disk${savedPath}`, size: fileSize });
+        
+        // 🔥 ОБНОВЛЯЕМ ОТОБРАЖЕНИЕ СКОПИРОВАННОГО ОБЪЕМА
+        updateCopiedSizeDisplay();
+        
         log(`✅ Сохранено: ${savedPath}`, 'success');
         return { saved: true };
     }
@@ -563,6 +578,12 @@ async function getFileSize(publicKey, filePath) {
         if (res.ok) { const d = await res.json(); return d.size || 0; }
     } catch {}
     return 0;
+}
+
+// 🔥 НОВАЯ ФУНКЦИЯ: Обновление отображения скопированного объема
+function updateCopiedSizeDisplay() {
+    const totalCopied = state.stats.successSize;
+    statCopiedSize.textContent = formatSize(totalCopied);
 }
 
 // ==================== ОБРАБОТКА ПАПОК (ВЕРСИЯ 5.5) ====================
@@ -703,6 +724,7 @@ function generateReportContent() {
     const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
 
     let html = `<div class="report-section"><h3>📊 Сводная статистика</h3>
+        <p><b>Версия приложения:</b> ${APP_VERSION}</p>
         <p><b>Ссылок:</b> ${s.totalLinks} | <b>Папок:</b> ${s.foldersProcessed} | <b>Файлов:</b> ${s.totalFiles} (${formatSize(s.totalFilesSize)})</p>
         <p><b>Успешно:</b> ${s.successCount} (${formatSize(s.successSize)}) | <b>Дубли:</b> ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | <b>Ошибки:</b> ${s.errorCount} (${formatSize(s.errorSize)})</p>
         <p><b>Эффективность:</b> <span style="color:var(--accent)">${rate}%</span></p></div>`;
@@ -729,7 +751,13 @@ function generateReportMarkdown() {
     const s = state.stats;
     const total = s.successCount + s.duplicateCount + s.errorCount;
     const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
-    let md = `# 📄 Отчёт Yandex Saver v5.9.2\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
+    let md = `# 📄 Отчёт Yandex Saver ${APP_VERSION}\n\n`;
+    md += `**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
+    md += `## 📊 Сводка\n`;
+    md += `- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n`;
+    md += `- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n`;
+    md += `- Эффективность: ${rate}%\n\n`;
+    
     if (s.errorFiles.length) { md += `## ❌ Ошибки (${s.errorCount}, ${formatSize(s.errorSize)})\n`; s.errorFiles.forEach((f, i) => md += `${i + 1}. [${f.name}](${f.url}) | ${f.size ? formatSize(f.size) : '0 Б'} | ${f.reason}\n`); md += '\n'; }
     if (s.duplicateFiles.length) { md += `## 🔄 Дубликаты (${s.duplicateCount}, ${formatSize(s.duplicateSize)})\n`; s.duplicateFiles.forEach((f, i) => md += `${i + 1}. [${f.name}](${f.url}) | ${f.size ? formatSize(f.size) : '0 Б'}\n`); md += '\n'; }
     if (s.successFiles.length) { md += `## ✅ Скопировано (${s.successCount}, ${formatSize(s.successSize)})\n`; s.successFiles.forEach(f => md += `- [${f.name}](${f.url})\n`); }

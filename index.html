@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yandex Saver v5.6.1</title>
+    <title>Yandex Saver v5.6.2</title>
     <style>
         :root{--bg:#f5f7fa;--card:#fff;--primary:#fc3f1d;--primary-hover:#e6300f;--text:#333;--text-light:#666;--border:#e0e0e0;--success:#4caf50;--error:#f44336;--warning:#ff9800;--info:#2196f3}
         *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
@@ -36,11 +36,13 @@
         .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
         .modal-content{background:white;padding:24px;border-radius:20px;width:90%;max-width:700px;max-height:80vh;overflow-y:auto}
         .report-section{margin-bottom:20px;padding:12px;background:#f8f9fa;border-radius:10px}
-        .report-section h3{margin-bottom:8px;color:var(--error)}
+        .report-section h3{margin-bottom:8px}
         .report-section ul{list-style:none;padding:0}
-        .report-section li{margin:6px 0;padding:8px;background:#fff;border-radius:6px;font-size:.9rem}
+        .report-section li{margin:6px 0;padding:8px;background:#fff;border-radius:6px;font-size:.9rem;word-break:break-word}
         .report-section a{color:var(--primary);text-decoration:none}
         .file-size{color:var(--text-light);font-size:.85em;float:right}
+        .report-header{background:var(--primary);color:white;padding:12px;border-radius:10px;margin-bottom:16px}
+        .report-version{font-size:.85em;opacity:.9}
         @media(max-width:600px){.container{padding:20px}.disk-info{margin-left:0;margin-top:10px;width:100%;justify-content:space-around}}
     </style>
 </head>
@@ -48,7 +50,7 @@
 <div class="container">
     <div class="header" onclick="location.reload()">
         <h1>🗂 Yandex Saver</h1>
-        <span class="badge">v5.6.1</span>
+        <span class="badge">v5.6.2</span>
     </div>
     <div class="hint">Сохранение файлов с надёжной авторизацией</div>
 
@@ -70,12 +72,12 @@
             <button id="browseBtn" style="width:auto">📂 Обзор</button>
         </div>
         <div id="folder-browser" class="folder-browser" style="display:none"></div>
-        <button id="btn-next" style="display:none" onclick="goToStep('step-links')">➡️ Далее</button>
+        <button id="btn-next" style="display:none;margin-top:10px" onclick="goToStep('step-links')">➡️ Далее: вставить ссылки</button>
     </div>
 
     <div id="step-links" class="step">
         <label>🔗 Вставьте ссылки</label>
-        <textarea id="links-input" rows="5" placeholder="https://disk.yandex.ru/d/..."></textarea>
+        <textarea id="links-input" rows="5" placeholder="https://disk.yandex.ru/d/...&#10;https://yadi.sk/i/..."></textarea>
         
         <div style="background:#f8f9fa;padding:12px;border-radius:10px;margin:10px 0;display:flex;gap:12px;flex-wrap:wrap">
             <div>🔍 <strong>Ссылок:</strong> <span id="links-count">0</span></div>
@@ -117,6 +119,7 @@
 
 <script>
 // ========== КОНФИГУРАЦИЯ ==========
+const APP_VERSION = '5.6.2';
 const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
 const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
 const API = 'https://cloud-api.yandex.net/v1/disk';
@@ -128,7 +131,7 @@ let isRunning = false;
 let abortController = null;
 let popup = null;
 let popupTimer = null;
-let processedPaths = new Set();
+let processedPublicPaths = new Set();
 
 const stats = {
     totalLinks: 0,
@@ -170,7 +173,7 @@ function updateStatus(msg) {
 function showMessage(type, text) {
     const div = document.createElement('div');
     div.className = type === 'error' ? 'error-box' : 'success-box';
-    div.textContent = text;
+    div.innerHTML = text;
     el('auth-message').appendChild(div);
     setTimeout(() => div.remove(), 5000);
 }
@@ -243,7 +246,6 @@ function handlePopupMessage(event) {
     window.removeEventListener('message', handlePopupMessage);
 }
 
-// Обработка возврата через hash
 if (window.location.hash.includes('access_token=')) {
     const match = window.location.hash.match(/access_token=([^&]+)/);
     if (match && match[1]) {
@@ -314,7 +316,7 @@ async function fetchDiskInfo() {
     }
 }
 
-// ========== БРАУЗЕР ПАПОК (КАК В 5.5) ==========
+// ========== БРАУЗЕР ПАПОК ==========
 el('browseBtn').onclick = async function() {
     let p = el('folder-input').value.trim() || '/';
     if (!p.startsWith('/')) p = '/' + p;
@@ -376,11 +378,10 @@ async function loadFolderContents(path) {
     }
 }
 
-// ========== ИЗВЛЕЧЕНИЕ ССЫЛОК (АККУРАТНО, БЕЗ ИЗМЕНЕНИЙ) ==========
+// ========== ИЗВЛЕЧЕНИЕ ССЫЛОК ==========
 function extractLinks(text) {
     const regex = /https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi;
     const found = text.match(regex) || [];
-    // Убираем дубликаты, сохраняя порядок
     const unique = [];
     const seen = new Set();
     found.forEach(url => {
@@ -407,26 +408,30 @@ el('links-input').oninput = function() {
     el('links-count').textContent = links.length;
 };
 
-// ========== ОТЧЁТЫ ==========
+// ========== ОТЧЁТЫ С ВЕРСИЕЙ ==========
 function generateReport() {
     const total = stats.successCount + stats.duplicateCount + stats.errorCount;
     const rate = total > 0 ? ((stats.successCount / total) * 100).toFixed(1) : '0.0';
     
-    let html = `<div class="report-section">`;
-    html += `<h3 style="color:var(--text)">📊 Сводная статистика</h3>`;
-    html += `<p><strong>Ссылок:</strong> ${stats.totalLinks} | <strong>Папок:</strong> ${stats.foldersProcessed} | <strong>Файлов:</strong> ${stats.totalFiles} (${formatBytes(stats.totalSize)})</p>`;
-    html += `<p><strong>Успешно:</strong> ${stats.successCount} (${formatBytes(stats.successSize)}) | <strong>Дубли:</strong> ${stats.duplicateCount} (${formatBytes(stats.duplicateSize)}) | <strong>Ошибки:</strong> ${stats.errorCount} (${formatBytes(stats.errorSize)})</p>`;
-    html += `<p><strong>Эффективность:</strong> <span style="color:${rate === '100.0' ? 'var(--success)' : 'var(--error)'}">${rate}%</span></p>`;
+    let html = `<div class="report-header">`;
+    html += `<div style="display:flex;justify-content:space-between;align-items:center">`;
+    html += `<div><strong>📊 Сводная статистика</strong></div>`;
+    html += `<div class="report-version">Yandex Saver v${APP_VERSION}</div>`;
     html += `</div>`;
+    html += `<div style="margin-top:8px;font-size:.9em">`;
+    html += `<strong>Ссылок:</strong> ${stats.totalLinks} | <strong>Папок:</strong> ${stats.foldersProcessed} | <strong>Файлов:</strong> ${stats.totalFiles} (${formatBytes(stats.totalSize)})<br>`;
+    html += `<strong>Успешно:</strong> ${stats.successCount} (${formatBytes(stats.successSize)}) | <strong>Дубли:</strong> ${stats.duplicateCount} (${formatBytes(stats.duplicateSize)}) | <strong>Ошибки:</strong> ${stats.errorCount} (${formatBytes(stats.errorSize)})<br>`;
+    html += `<strong>Эффективность:</strong> <span style="color:${rate === '100.0' ? '#4caf50' : '#f44336'};font-weight:bold">${rate}%</span>`;
+    html += `</div></div>`;
     
     if (stats.errorFiles.length > 0) {
         html += `<div class="report-section">`;
-        html += `<h3>❌ Ошибки (${stats.errorCount}, ${formatBytes(stats.errorSize)})</h3>`;
+        html += `<h3 style="color:var(--error)">❌ Ошибки (${stats.errorCount}, ${formatBytes(stats.errorSize)})</h3>`;
         html += `<ul>`;
         stats.errorFiles.forEach((f, i) => {
             html += `<li><strong>${i+1}.</strong> ${f.name} <span class="file-size">${f.size ? formatBytes(f.size) : '?'}</span><br>`;
             html += `<small style="color:var(--error)">Причина: ${f.reason}</small>`;
-            if (f.url) html += ` <a href="${f.url}" target="_blank">🔗</a>`;
+            if (f.url) html += ` <a href="${f.url}" target="_blank" style="float:right">🔗</a>`;
             html += `</li>`;
         });
         html += `</ul></div>`;
@@ -438,7 +443,7 @@ function generateReport() {
         html += `<ul>`;
         stats.duplicateFiles.forEach((f, i) => {
             html += `<li><strong>${i+1}.</strong> ${f.name} <span class="file-size">${f.size ? formatBytes(f.size) : '?'}</span>`;
-            if (f.url) html += ` <a href="${f.url}" target="_blank">🔗</a>`;
+            if (f.url) html += ` <a href="${f.url}" target="_blank" style="float:right">🔗</a>`;
             html += `</li>`;
         });
         html += `</ul></div>`;
@@ -450,7 +455,7 @@ function generateReport() {
         html += `<ul>`;
         stats.successFiles.forEach(f => {
             html += `<li>${f.name} <span class="file-size">${f.size ? formatBytes(f.size) : '?'}</span>`;
-            if (f.url) html += ` <a href="${f.url}" target="_blank">🔗</a>`;
+            if (f.url) html += ` <a href="${f.url}" target="_blank" style="float:right">🔗</a>`;
             html += `</li>`;
         });
         html += `</ul></div>`;
@@ -472,7 +477,7 @@ function downloadReport() {
     const total = stats.successCount + stats.duplicateCount + stats.errorCount;
     const rate = total > 0 ? ((stats.successCount / total) * 100).toFixed(1) : '0.0';
     
-    let md = `# 📄 Отчёт Yandex Saver v5.6.1\n\n`;
+    let md = `# 📄 Отчёт Yandex Saver v${APP_VERSION}\n\n`;
     md += `**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
     md += `## 📊 Сводка\n`;
     md += `- Ссылок: ${stats.totalLinks} | Папок: ${stats.foldersProcessed} | Файлов: ${stats.totalFiles} (${formatBytes(stats.totalSize)})\n`;
@@ -559,7 +564,7 @@ async function fileExists(path) {
     }
 }
 
-// Троттлинг запросов (3 в секунду)
+// Троттлинг
 class Throttler {
     constructor(maxPerSec = 3) {
         this.max = maxPerSec;
@@ -578,21 +583,21 @@ class Throttler {
 }
 const throttler = new Throttler(3);
 
-// ========== СОХРАНЕНИЕ ФАЙЛА ==========
-async function saveFile(publicKey, filePath, targetPath, fileName, sourceUrl) {
+// ========== СОХРАНЕНИЕ ФАЙЛА (ИСПРАВЛЕНО) ==========
+async function saveFile(publicKey, filePath, targetPath, fileName, sourceUrl, fileSize = 0) {
     if (!isRunning) throw new Error('Остановлено');
     
     const fullPath = normalizePath(`${targetPath}/${fileName}`);
     
-    // Проверяем, существует ли уже
+    // Проверяем существование
     if (await fileExists(fullPath)) {
         addLog(`⏭ Уже существует: ${fileName}`);
         stats.duplicateCount++;
-        stats.duplicateSize += 0; // размер неизвестен
+        stats.duplicateSize += fileSize;
         stats.duplicateFiles.push({
             name: fileName,
             url: sourceUrl,
-            size: 0
+            size: fileSize
         });
         return { skipped: true, reason: 'exists' };
     }
@@ -600,6 +605,7 @@ async function saveFile(publicKey, filePath, targetPath, fileName, sourceUrl) {
     updateStatus(`💾 ${fileName}`);
     addLog(`⬇️ Сохраняю: ${fileName}`);
     
+    // ВАЖНО: используем public_key и path из публичной ссылки
     const params = new URLSearchParams({
         public_key: publicKey,
         path: filePath,
@@ -616,24 +622,26 @@ async function saveFile(publicKey, filePath, targetPath, fileName, sourceUrl) {
         if (res.status === 202) {
             addLog(`⏳ В очереди: ${fileName}`);
             stats.successCount++;
+            stats.successSize += fileSize;
             stats.successFiles.push({
                 name: fileName,
                 url: `${API}/resources?path=${encodeURIComponent(fullPath)}`,
-                size: 0
+                size: fileSize
             });
             return { saved: true };
         }
         
         if (!res.ok) {
             const text = await res.text().catch(() => '');
-            const error = `API ${res.status}: ${text.slice(0, 150)}`;
-            addLog(`❌ Ошибка: ${error}`);
+            const error = `API ${res.status}: ${text.slice(0, 200)}`;
+            addLog(`❌ Ошибка сохранения ${fileName}: ${error}`);
             stats.errorCount++;
+            stats.errorSize += fileSize;
             stats.errorFiles.push({
                 name: fileName,
                 url: sourceUrl,
                 reason: error,
-                size: 0
+                size: fileSize
             });
             throw new Error(error);
         }
@@ -643,10 +651,11 @@ async function saveFile(publicKey, filePath, targetPath, fileName, sourceUrl) {
             const savedName = result.name || fileName;
             addLog(`✅ Сохранено: ${normalizePath(`${targetPath}/${savedName}`)}`);
             stats.successCount++;
+            stats.successSize += fileSize;
             stats.successFiles.push({
                 name: savedName,
                 url: `${API}/resources?path=${encodeURIComponent(fullPath)}`,
-                size: 0
+                size: fileSize
             });
             return { saved: true };
         }
@@ -654,19 +663,13 @@ async function saveFile(publicKey, filePath, targetPath, fileName, sourceUrl) {
         throw new Error('Неожиданный ответ API');
     } catch(e) {
         if (e.message !== 'Остановлено') {
-            stats.errorCount++;
-            stats.errorFiles.push({
-                name: fileName,
-                url: sourceUrl,
-                reason: e.message,
-                size: 0
-            });
+            // Уже добавлено в ошибки выше
         }
         throw e;
     }
 }
 
-// ========== ОБРАБОТКА ПАПКИ ==========
+// ========== ОБРАБОТКА ПАПКИ (КАК В 5.5) ==========
 async function processFolder(publicKey, targetBase, folderName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
     
@@ -687,41 +690,48 @@ async function processFolder(publicKey, targetBase, folderName, sourceUrl) {
         const data = await resp.json();
         const items = data._embedded?.items || data.items || [];
         
+        addLog(`📊 Найдено: ${items.filter(i=>i.type==='file').length} файлов, ${items.filter(i=>i.type==='dir').length} папок`);
+        
         for (const item of items) {
             if (!isRunning) throw new Error('Остановлено');
             
-            // Проверяем, не обрабатывали ли уже
-            if (processedPaths.has(item.path)) {
-                addLog(`⚠️ Пропуск (уже был): ${item.path}`);
+            // КЛЮЧЕВОЕ: проверяем по item.path чтобы избежать дублей
+            if (processedPublicPaths.has(item.path)) {
+                addLog(`⚠️ Пропуск (уже обработан): ${item.path}`);
                 continue;
             }
-            processedPaths.add(item.path);
-            
-            const relPath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-            const itemTarget = normalizePath(`${rootPath}/${relPath}`);
+            processedPublicPaths.add(item.path);
             
             if (item.type === 'file') {
                 stats.totalFiles++;
-                stats.totalSize += (item.size || 0);
+                const fileSize = item.size || 0;
+                stats.totalSize += fileSize;
                 
+                // Определяем целевую папку для файла
                 const dirInPublic = getDirFromPath(item.path);
-                const fileTarget = dirInPublic ? normalizePath(`${rootPath}/${dirInPublic}`) : rootPath;
+                const fileTargetPath = dirInPublic 
+                    ? normalizePath(`${rootPath}/${dirInPublic}`) 
+                    : rootPath;
                 
                 try {
-                    await saveFile(publicKey, item.path, fileTarget, item.name, sourceUrl);
+                    await saveFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl, fileSize);
                 } catch(e) {
-                    addLog(`❌ Ошибка сохранения ${item.name}: ${e.message}`);
+                    addLog(`❌ Ошибка ${item.name}: ${e.message}`);
                 }
             } else if (item.type === 'dir') {
-                await ensureFolderExists(itemTarget);
-                addLog(`📁 Создана подпапка: ${itemTarget}`);
+                const relPath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
+                const itemTargetPath = normalizePath(`${rootPath}/${relPath}`);
+                await ensureFolderExists(itemTargetPath);
+                addLog(`📁 Создана подпапка: ${itemTargetPath}`);
                 
+                // Рекурсивная обработка подпапки
                 const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
                 await processSubFolder(subUrl, publicKey, rootPath, sourceUrl);
             }
         }
         
         url = data._embedded?.next || data.next || null;
+        if (url) addLog(`🔄 Следующая страница...`);
     }
 }
 
@@ -737,25 +747,31 @@ async function processSubFolder(url, publicKey, rootPath, sourceUrl) {
     
     for (const item of items) {
         if (!isRunning) throw new Error('Остановлено');
-        if (processedPaths.has(item.path)) continue;
-        processedPaths.add(item.path);
+        
+        if (processedPublicPaths.has(item.path)) {
+            continue;
+        }
+        processedPublicPaths.add(item.path);
         
         if (item.type === 'file') {
             stats.totalFiles++;
-            stats.totalSize += (item.size || 0);
+            const fileSize = item.size || 0;
+            stats.totalSize += fileSize;
             
             const dirInPublic = getDirFromPath(item.path);
-            const fileTarget = dirInPublic ? normalizePath(`${rootPath}/${dirInPublic}`) : rootPath;
+            const fileTargetPath = dirInPublic 
+                ? normalizePath(`${rootPath}/${dirInPublic}`) 
+                : rootPath;
             
             try {
-                await saveFile(publicKey, item.path, fileTarget, item.name, sourceUrl);
+                await saveFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl, fileSize);
             } catch(e) {
                 addLog(`❌ Ошибка ${item.name}: ${e.message}`);
             }
         } else if (item.type === 'dir') {
             const relPath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-            const itemTarget = normalizePath(`${rootPath}/${relPath}`);
-            await ensureFolderExists(itemTarget);
+            const itemTargetPath = normalizePath(`${rootPath}/${relPath}`);
+            await ensureFolderExists(itemTargetPath);
             
             const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
             await processSubFolder(subUrl, publicKey, rootPath, sourceUrl);
@@ -770,7 +786,8 @@ async function processSubFolder(url, publicKey, rootPath, sourceUrl) {
 
 // ========== ОБРАБОТКА ССЫЛКИ ==========
 async function processLink(publicUrl, targetBase) {
-    processedPaths.clear();
+    // Очищаем множество обработанных путей для новой ссылки
+    processedPublicPaths.clear();
     
     await throttler.wait();
     const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, {
@@ -778,15 +795,16 @@ async function processLink(publicUrl, targetBase) {
     });
     
     if (!metaResp.ok) {
-        addLog(`❌ Недоступна ссылка: ${publicUrl} (${metaResp.status})`);
+        const errorMsg = `Недоступна ссылка (${metaResp.status})`;
+        addLog(`❌ ${errorMsg}: ${publicUrl}`);
         stats.errorCount++;
         stats.errorFiles.push({
             name: '(корень)',
             url: publicUrl,
-            reason: `Недоступна (${metaResp.status})`,
+            reason: errorMsg,
             size: 0
         });
-        throw new Error(`Недоступно (${metaResp.status})`);
+        throw new Error(errorMsg);
     }
     
     const meta = await metaResp.json();
@@ -794,9 +812,10 @@ async function processLink(publicUrl, targetBase) {
     if (meta.type === 'file') {
         addLog(`📄 Файл: ${meta.name}`);
         stats.totalFiles++;
-        stats.totalSize += (meta.size || 0);
+        const fileSize = meta.size || 0;
+        stats.totalSize += fileSize;
         
-        return (await saveFile(publicUrl, meta.path || `/${meta.name}`, targetBase, meta.name, publicUrl))?.skipped 
+        return (await saveFile(publicUrl, meta.path || `/${meta.name}`, targetBase, meta.name, publicUrl, fileSize))?.skipped 
             ? { skipped: true } 
             : { saved: true };
     } else if (meta.type === 'dir' || meta._embedded?.items) {
@@ -847,7 +866,7 @@ async function startProcess() {
     
     isRunning = true;
     abortController = new AbortController();
-    processedPaths.clear();
+    processedPublicPaths.clear(); // Очищаем перед началом
     
     el('btn-start').disabled = true;
     el('btn-stop').style.display = 'block';
@@ -857,7 +876,6 @@ async function startProcess() {
     addLog(`🚀 Старт: ${links.length} ссылок | 📁 ${TARGET_FOLDER}`);
     updateStatus(`⏳ 1/${links.length}`);
     
-    // Создаём целевую папку
     await ensureFolderExists(TARGET_FOLDER);
     
     let success = 0;
@@ -906,7 +924,7 @@ async function startProcess() {
     
     addLog(`🎉 Завершено: ${success} сохранено, ${skipped} дублей, ${errors} ошибок`);
     
-    const msg = `✅ Готово: ${success} сохранено`;
+    let msg = `✅ Готово: ${success} сохранено`;
     if (skipped > 0) msg += `, ${skipped} дублей`;
     if (errors > 0) msg += `, ${errors} ошибок`;
     showMessage(errors === 0 ? 'success' : 'warning', msg);

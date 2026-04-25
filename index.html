@@ -2,96 +2,73 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Yandex Saver">
-  <meta name="theme-color" content="#fc3f1d">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗂</text></svg>">
-  <title>Yandex Saver — Сохранение файлов и папок</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Yandex Saver v5.9</title>
   <style>
-    :root{--bg:#121212;--surface:#1e1e1e;--card:#252525;--primary:#fc3f1d;--primary-hover:#e6300f;--text:#e0e0e0;--text-light:#888;--border:#333;--success:#4caf50;--error:#f44336;--warning:#ff9800;--info:#2196f3}
-    *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-    body{background:var(--bg);color:var(--text);padding:20px;min-height:100vh;display:flex;justify-content:center;align-items:flex-start}
-    .container{max-width:900px;width:100%;background:var(--surface);padding:28px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-    .header{display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
-    .header:active{opacity:.8}
-    .header h1{font-size:1.6rem;font-weight:600}
-    .header .badge{background:var(--primary);color:#fff;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:500}
-    .step{display:none;margin-top:24px;animation:fadeIn .3s ease}
-    .step.active{display:block}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-    label{display:block;margin-bottom:8px;font-weight:600;font-size:1.05rem}
-    input,textarea{width:100%;padding:14px;background:var(--card);border:2px solid var(--border);border-radius:12px;margin-bottom:14px;font-size:16px;transition:border-color .2s;color:var(--text)}
-    input:focus,textarea:focus{outline:none;border-color:var(--primary)}
-    button{background:var(--primary);color:#fff;border:none;padding:14px 20px;border-radius:12px;cursor:pointer;width:100%;margin-bottom:10px;font-size:16px;font-weight:500;transition:background .2s,transform .1s}
-    button:hover{background:var(--primary-hover);transform:translateY(-1px)}
-    button:active{transform:translateY(0)}
-    button:disabled{background:#444;cursor:not-allowed;transform:none}
-    button.secondary{background:#444}
-    button.secondary:hover{background:#555}
-    .hint{font-size:.9rem;color:var(--text-light);margin-bottom:14px;line-height:1.5}
-    .error-box{background:rgba(244,67,54,0.2);color:#f44336;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--error)}
-    .success-box{background:rgba(76,175,80,0.2);color:#4caf50;padding:14px;border-radius:12px;margin:14px 0;border-left:4px solid var(--success)}
-    .log{background:#0d1117;color:#7ee787;padding:16px;border-radius:12px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:.85rem;height:280px;overflow-y:auto;margin-top:16px;white-space:pre-wrap;word-break:break-all;line-height:1.4;display:none}
-    .progress-bar{width:100%;height:10px;background:#333;border-radius:6px;margin:16px 0;overflow:hidden}
-    .progress-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--primary-hover));width:0%;transition:width .4s ease}
-    .user-info{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--card);border-radius:12px;margin-bottom:20px}
-    .status-panel{background:var(--card);padding:14px 18px;border-radius:12px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .status-panel span{font-weight:600;color:var(--primary)}
-    .disk-info{display:flex;gap:16px;font-size:.9rem;color:var(--text-light);margin-left:auto}
-    .disk-info .item{display:flex;align-items:center;gap:6px}
-    .disk-info .item.free{color:var(--success);font-weight:600}
-    .folder-browser{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:14px;margin-top:14px;max-height:320px;overflow-y:auto}
-    .folder-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #333;display:flex;align-items:center;gap:10px;border-radius:8px;transition:background .15s}
-    .folder-item:hover{background:#2a2a2a}
-    .folder-item:last-child{border-bottom:none}
-    .folder-item .name{flex:1;font-weight:500}
-    .new-folder-btn{background:var(--primary);color:white;border:none;padding:10px 16px;border-radius:24px;cursor:pointer;margin-top:12px;width:auto;font-size:.9rem}
-    .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
-    .modal-content{background:var(--surface);padding:24px;border-radius:20px;width:340px}
-    .copy-log-btn{background:#3d5a80;margin-top:12px;width:auto;padding:10px 18px;border-radius:24px;font-size:.9rem}
-    .stage-indicator{display:flex;gap:8px;margin-bottom:20px;justify-content:center}
-    .stage{flex:1;text-align:center;padding:10px;border-radius:10px;background:#2a2a2a;font-size:.85rem;font-weight:500;color:var(--text-light);transition:all .2s}
-    .stage.active{background:var(--primary);color:#fff}
-    .stage.done{background:var(--success);color:#fff}
-    .file-preview{background:var(--card);padding:12px;border-radius:10px;margin:10px 0;font-size:.9rem;display:flex;flex-wrap:wrap;gap:12px}
-    .file-preview .item{display:flex;align-items:center;gap:6px}
-    .file-preview code{background:#333;padding:2px 6px;border-radius:4px;font-family:monospace}
-    .scan-status{background:#fff8e1;color:#856404;padding:10px 14px;border-radius:10px;margin:10px 0;font-size:.9rem;display:none}
-    .scan-status.active{display:block}
-    .file-upload-area{border:2px dashed var(--border);border-radius:12px;padding:16px;text-align:center;margin:12px 0;background:#1a1a1a;transition:border-color .2s;cursor:pointer}
-    .file-upload-area:hover{border-color:var(--primary)}
-    .file-upload-area.dragover{border-color:var(--primary);background:#2a2a2a}
-    .file-upload-btn{background:var(--info);margin:0}
-    .file-upload-btn:hover{background:#1976d2}
-    .report-btn{background:var(--success);margin-top:8px}
-    .report-btn:hover{background:#388e3c}
-    .report-btn:disabled{background:#444}
-    .connection-status{position:fixed;top:12px;right:12px;padding:8px 14px;border-radius:20px;font-size:.85rem;font-weight:500;z-index:1001;transition:all .3s;box-shadow:0 4px 12px rgba(0,0,0,.15)}
-    .connection-status.online{background:var(--success);color:#fff}
-    .connection-status.offline{background:var(--error);color:#fff}
-    .connection-status.hidden{opacity:0;pointer-events:none}
-    .refresh-hint{font-size:.75rem;color:var(--text-light);text-align:center;margin-top:4px}
-    @media(max-width:600px){.container{padding:20px;border-radius:16px}.log{height:220px}.disk-info{margin-left:0;margin-top:10px;width:100%;justify-content:space-around}.connection-status{top:auto;bottom:12px;right:12px}.file-preview{flex-direction:column;gap:8px}}
+    :root {
+      --bg: #121212;
+      --surface: #1e1e1e;
+      --card: #252525;
+      --primary: #fc3f1d;
+      --primary-hover: #e6300f;
+      --text: #e0e0e0;
+      --text-light: #888;
+      --border: #333;
+      --success: #4caf50;
+      --error: #f44336;
+      --warning: #ff9800;
+      --info: #2196f3;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 20px; min-height: 100vh; display: flex; justify-content: center; }
+    .container { max-width: 900px; width: 100%; background: var(--surface); padding: 28px; border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+    .header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .header h1 { font-size: 1.6rem; font-weight: 600; }
+    .badge { background: var(--primary); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
+    .step { display: none; margin-top: 24px; }
+    .step.active { display: block; }
+    label { display: block; margin-bottom: 8px; font-weight: 600; }
+    input, textarea { width: 100%; padding: 14px; background: var(--card); border: 2px solid var(--border); border-radius: 12px; margin-bottom: 14px; font-size: 16px; color: var(--text); }
+    input:focus, textarea:focus { outline: none; border-color: var(--primary); }
+    button { background: var(--primary); color: #fff; border: none; padding: 14px 20px; border-radius: 12px; cursor: pointer; width: 100%; margin-bottom: 10px; font-size: 16px; font-weight: 500; }
+    button:hover { background: var(--primary-hover); }
+    button:disabled { background: #444; cursor: not-allowed; }
+    button.secondary { background: #444; }
+    .hint { font-size: 0.9rem; color: var(--text-light); margin-bottom: 14px; }
+    .error-box { background: rgba(244,67,54,0.2); color: var(--error); padding: 14px; border-radius: 12px; margin: 14px 0; border-left: 4px solid var(--error); }
+    .success-box { background: rgba(76,175,80,0.2); color: var(--success); padding: 14px; border-radius: 12px; margin: 14px 0; border-left: 4px solid var(--success); }
+    .log { background: #0d1117; color: #7ee787; padding: 16px; border-radius: 12px; font-family: monospace; font-size: 0.85rem; height: 280px; overflow-y: auto; margin-top: 16px; display: none; white-space: pre-wrap; }
+    .user-info { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--card); border-radius: 12px; margin-bottom: 20px; }
+    .status-panel { background: var(--card); padding: 14px; border-radius: 12px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .disk-info { display: flex; gap: 16px; margin-left: auto; font-size: 0.9rem; color: var(--text-light); }
+    .folder-browser { background: var(--card); border: 2px solid var(--border); border-radius: 14px; padding: 14px; margin-top: 14px; max-height: 320px; overflow-y: auto; }
+    .folder-item { padding: 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
+    .folder-item:hover { background: #2a2a2a; }
+    .progress-bar { width: 100%; height: 10px; background: #333; border-radius: 6px; margin: 16px 0; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+    .file-preview { background: var(--card); padding: 12px; border-radius: 10px; margin: 10px 0; display: flex; gap: 12px; flex-wrap: wrap; }
+    .file-preview code { background: #333; padding: 2px 6px; border-radius: 4px; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: var(--surface); padding: 24px; border-radius: 20px; width: 90%; max-width: 700px; max-height: 80vh; overflow-y: auto; }
+    .report-header { background: var(--primary); color: white; padding: 12px; border-radius: 10px; margin-bottom: 16px; }
+    .report-section { margin-bottom: 20px; padding: 12px; background: var(--card); border-radius: 10px; }
+    .report-section ul { list-style: none; }
+    .report-section li { margin: 6px 0; padding: 8px; background: #1e1e1e; border-radius: 6px; }
+    .file-size { color: var(--text-light); float: right; }
+    @media (max-width: 600px) {
+      .container { padding: 20px; }
+      .disk-info { margin-left: 0; margin-top: 10px; width: 100%; justify-content: space-around; }
+      .file-preview { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
 <div class="container">
-  <div class="header" onclick="forceRefresh()" title="Нажмите для обновления страницы">
+  <div class="header" onclick="location.reload()">
     <h1>🗂 Yandex Saver</h1>
-    <span class="badge">v5.7.1 ✨</span>
+    <span class="badge">v5.9</span>
   </div>
-  <div class="refresh-hint">🔄 Нажмите на заголовок для принудительного обновления</div>
-  
-  <div class="hint">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</div>
-
-  <div class="stage-indicator">
-    <div class="stage active" id="stage-1">1. Авторизация</div>
-    <div class="stage" id="stage-2">2. Папка</div>
-    <div class="stage" id="stage-3">3. Ссылки</div>
-    <div class="stage" id="stage-4">4. Обработка</div>
-  </div>
+  <div class="hint">Сохранение файлов с надёжной авторизацией</div>
 
   <div id="user-block" class="user-info" style="display:none">
     <span>✅ <strong>Диск подключён</strong></span>
@@ -100,1017 +77,596 @@
 
   <div id="step-auth" class="step active">
     <label>🔐 Подключите Яндекс.Диск</label>
-    <button id="authPopupBtn">🔑 Авторизоваться (всплывающее окно)</button>
+    <button id="authBtn">🔑 Авторизоваться</button>
     <div id="auth-message"></div>
-    <div class="hint" style="margin-top:16px;background:var(--card);padding:14px;border-radius:12px">
-      <strong>ℹ️ Безопасность:</strong> Токен хранится только в памяти вкладки.<br>
-      <strong>📱 iOS:</strong> Если приложение не обновляется — нажмите на заголовок 🗂 для принудительной перезагрузки.
-    </div>
   </div>
 
   <div id="step-folder" class="step">
     <label>📁 Папка назначения</label>
     <div style="display:flex;gap:10px">
-      <input type="text" id="folder-input" value="/saved-materials" style="flex:1" placeholder="/путь/к/папке">
-      <button id="browseFolderBtn" style="width:auto;padding:14px 18px">📂 Обзор</button>
+      <input type="text" id="folder-input" value="/saved-materials" style="flex:1">
+      <button id="browseBtn" style="width:auto">📂 Обзор</button>
     </div>
     <div id="folder-browser" class="folder-browser" style="display:none"></div>
-    <button onclick="validateAndCreateFolder()">✅ Проверить и создать папку</button>
-    <div id="folder-status" class="hint"></div>
-    <button id="btn-next-links" style="display:none" onclick="goToStep('step-links');updateStage(3)">➡️ Далее: вставить ссылки</button>
+    <button id="btn-next" style="display:none;margin-top:10px" onclick="goToStep('step-links')">➡️ Далее</button>
   </div>
 
   <div id="step-links" class="step">
-    <label>🔗 Вставьте текст со ссылками</label>
-    <textarea id="links-input" rows="5" placeholder="Пример:&#10;• https://disk.yandex.ru/d/AbCdEfGhIjK&#10;• https://yadi.sk/i/XyZ123"></textarea>
-    
-    <div class="file-upload-area" id="fileUploadArea">
-      <div style="margin-bottom:8px">📎 Или загрузите файл со ссылками (.txt, .md, .html, .json)</div>
-      <input type="file" id="fileInput" accept=".txt,.md,.html,.htm,.json,.csv" style="display:none">
-      <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">📂 Выбрать файл</button>
-      <div class="hint" style="margin-top:8px;font-size:.85rem">Поддерживается перетаскивание файла в эту область</div>
-    </div>
-    
+    <label>🔗 Вставьте ссылки</label>
+    <textarea id="links-input" rows="5" placeholder="https://disk.yandex.ru/d/..."></textarea>
     <div class="file-preview">
-      <div class="item">🔍 <strong>Ссылок:</strong> <span id="links-count">0</span></div>
-      <div class="item">📁 <strong>Куда:</strong> <code id="target-preview">/saved-materials</code></div>
-      <div class="item">💾 <strong>Свободно:</strong> <span id="free-space" class="free">—</span></div>
-      <div class="item">📦 <strong>Нужно:</strong> <span id="required-space" class="required">—</span></div>
+      <div>🔍 <strong>Ссылок:</strong> <span id="links-count">0</span></div>
+      <div>📁 <strong>Куда:</strong> <code id="target-preview">/saved-materials</code></div>
+      <div>💾 <strong>Свободно:</strong> <span id="free-space">—</span></div>
+      <div>📦 <strong>Нужно:</strong> <span id="required-space">—</span></div>
     </div>
-    
-    <div id="scan-status" class="scan-status">⏳ Сканирую публичные папки для расчёта размера...</div>
-    
     <button id="btn-start" onclick="startProcess()">🚀 Начать сохранение</button>
     <button id="btn-stop" class="secondary" style="display:none" onclick="stopProcess()">⏹ Остановить</button>
-    <button id="btn-download-report" class="report-btn" style="display:none" onclick="downloadReport()">📥 Скачать отчет об ошибках</button>
-    
-    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
-    <div id="progress-text" style="text-align:center;margin:8px 0;font-size:.95rem;color:var(--text-light)"></div>
+    <div class="progress-bar"><div id="progress" class="progress-fill"></div></div>
   </div>
 
   <div class="status-panel">
-    📋 Статус: <span id="current-status">Ожидание</span>
+    <span>📋 <span id="status">Ожидание</span></span>
     <div class="disk-info">
-      <div class="item free">💾 Свободно: <span id="disk-free">—</span></div>
-      <div class="item">📊 Всего: <span id="disk-total">—</span></div>
+      <span>💾 <strong id="disk-free">—</strong></span>
+      <span>📊 <strong id="disk-total">—</strong></span>
     </div>
   </div>
   
-  <div id="log" class="log" style="display:none"></div>
-  <button id="copyLogBtn" class="copy-log-btn" style="display:none">📋 Копировать лог</button>
+  <div id="log" class="log"></div>
+  <button id="copyLog" class="secondary" style="display:none;margin-top:12px" onclick="copyLog()">📋 Копировать лог</button>
 </div>
 
-<div id="newFolderModal" class="modal">
+<div id="reportModal" class="modal">
   <div class="modal-content">
-    <h3 style="margin-bottom:18px">➕ Создать папку</h3>
-    <input type="text" id="newFolderName" placeholder="Имя папки" style="margin-bottom:18px">
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button id="cancelNewFolderBtn" class="secondary" style="width:auto;margin:0">Отмена</button>
-      <button id="confirmNewFolderBtn" style="width:auto;margin:0">Создать</button>
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+      <h3>📋 Отчёт</h3>
+      <button onclick="closeReport()" style="background:none;border:none;font-size:1.5em;cursor:pointer;color:#888;width:auto;padding:0">×</button>
     </div>
+    <div id="reportBody"></div>
   </div>
 </div>
-
-<div id="connectionStatus" class="connection-status hidden">🌐 Онлайн</div>
 
 <script>
-  // ========== 📦 КОНФИГУРАЦИЯ ==========
-  const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
-  const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
-  const API = 'https://cloud-api.yandex.net/v1/disk';
-  
-  let TOKEN = '';
-  let TARGET_FOLDER = '';
-  let isRunning = false;
-  let abortController = null;
-  let popup = null, popupTimer = null;
-  let processedPublicPaths = new Set();
-  let diskInfoCache = null;
-  let wasRunningBeforeBlur = false;
-  let failedItems = [];
-  let tokenValidated = false;
-  
-  // ========== 🔄 ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ ==========
-  function forceRefresh() {
-    addLog('🔄 Принудительное обновление страницы...');
-    const url = new URL(window.location.href);
-    url.searchParams.set('_refresh', Date.now());
-    window.location.href = url.toString();
-  }
-  
-  // ========== 🔥 НАДЁЖНОЕ ПОЛУЧЕНИЕ ТОКЕНА ==========
-  function getStoredToken() {
-    try {
-      let token = sessionStorage.getItem('ydisk_token');
-      if (token && token.length > 20) return token;
-      token = localStorage.getItem('ydisk_token');
-      if (token && token.length > 20) {
-        addLog('📱 iOS: токен восстановлен из localStorage');
-        sessionStorage.setItem('ydisk_token', token);
-        return token;
-      }
-    } catch(e) {
-      addLog(`⚠️ Ошибка чтения токена: ${e.message}`);
-    }
-    return '';
-  }
-  
-  function storeToken(token) {
-    try {
-      sessionStorage.setItem('ydisk_token', token);
-      localStorage.setItem('ydisk_token', token);
-      addLog('🔑 Токен сохранён в sessionStorage + localStorage');
-    } catch(e) {
-      addLog(`❌ Ошибка сохранения токена: ${e.message}`);
-    }
-  }
-  
-  TOKEN = getStoredToken();
-  
-  // ========== 🔄 УПРАВЛЕНИЕ ЭТАПАМИ ==========
-  function updateStage(n) { 
-    for (let i=1;i<=4;i++){
-      const el=document.getElementById(`stage-${i}`);
-      el.classList.remove('active','done');
-      if(i<n)el.classList.add('done');
-      if(i===n)el.classList.add('active');
-    } 
-  }
-  
-  function goToStep(id){
-    document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-  }
+const APP_VERSION = '5.9';
+const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
+const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
+const API = 'https://cloud-api.yandex.net/v1/disk';
 
-  // ========== 🌐 ОБРАБОТКА СОЕДИНЕНИЯ ==========
-  function updateConnectionStatus() {
-    const el = document.getElementById('connectionStatus');
-    const isOnline = navigator.onLine;
-    el.textContent = isOnline ? '🌐 Онлайн' : '📴 Офлайн';
-    el.className = `connection-status ${isOnline ? 'online' : 'offline'}`;
-    el.classList.remove('hidden');
-    setTimeout(() => el.classList.add('hidden'), 3000);
-    if (isOnline && isRunning) addLog('🌐 Соединение восстановлено, продолжаем...');
-    if (!isOnline && isRunning) addLog('⚠️ Нет соединения, ожидаем восстановления...');
-  }
-  
-  window.addEventListener('online', updateConnectionStatus);
-  window.addEventListener('offline', updateConnectionStatus);
-  window.addEventListener('blur', () => { 
-    if (isRunning) { 
-      wasRunningBeforeBlur = true; 
-      addLog('⏸ Приложение в фоне, процесс приостановлен'); 
-    } 
-  });
-  
-  window.addEventListener('focus', () => { 
-    if (wasRunningBeforeBlur && isRunning) { 
-      wasRunningBeforeBlur = false; 
-      addLog('🔄 Возврат в приложение, возобновляем...'); 
-      updateDiskInfoDisplay(); 
-    } 
-  });
-  
-  document.addEventListener('visibilitychange', () => { 
-    if (document.visibilityState === 'visible' && isRunning) { 
-      addLog('👁 Вкладка активна, проверяем соединение...'); 
-      updateConnectionStatus(); 
-    } 
-  });
+let TOKEN = '';
+let TARGET_FOLDER = '/saved-materials';
+let isRunning = false;
+let abortController = null;
+let popup = null;
+let popupTimer = null;
+let processedPublicPaths = new Set();
+let diskInfoCache = null;
+let failedItems = [];
 
-  // ========== 🔐 АВТОРИЗАЦИЯ ==========
-  function startOAuthPopup(){
-    updateStatus('🔐 Открытие окна авторизации...');
-    updateStage(1);
-    const authUrl=`https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-    popup=window.open(authUrl,'YandexAuth',`width=520,height=700,left=${Math.floor((screen.width-520)/2)},top=${Math.floor((screen.height-700)/2)}`);
-    if(!popup){
-      showMessage('error','❌ Разрешите всплывающие окна');
-      return;
+const stats = {
+  totalLinks: 0, foldersProcessed: 0, totalFiles: 0, totalSize: 0,
+  successCount: 0, successSize: 0, successFiles: [],
+  duplicateCount: 0, duplicateSize: 0, duplicateFiles: [],
+  errorCount: 0, errorSize: 0, errorFiles: []
+};
+
+let logs = [];
+
+const el = id => document.getElementById(id);
+
+function addLog(msg) {
+  const time = new Date().toLocaleTimeString('ru-RU');
+  const line = `[${time}] ${msg}`;
+  logs.push(line);
+  const logEl = el('log');
+  logEl.style.display = 'block';
+  logEl.textContent += line + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+  console.log(`[YS] ${msg}`);
+}
+
+function updateStatus(msg) { el('status').textContent = msg; }
+
+function showMessage(type, text) {
+  const div = document.createElement('div');
+  div.className = type === 'error' ? 'error-box' : 'success-box';
+  div.textContent = text;
+  el('auth-message').appendChild(div);
+  setTimeout(() => div.remove(), 5000);
+}
+
+function goToStep(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  el(id).classList.add('active');
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 Б';
+  const k = 1024;
+  const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function normalizePath(p) {
+  if (!p) return '/';
+  return p.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+}
+
+function getStoredToken() {
+  try {
+    let t = sessionStorage.getItem('ydisk_token');
+    if (t && t.length > 20) return t;
+    t = localStorage.getItem('ydisk_token');
+    if (t && t.length > 20) {
+      sessionStorage.setItem('ydisk_token', t);
+      return t;
     }
-    window.addEventListener('message',handlePopupMessage);
-    popupTimer=setTimeout(()=>{
-      if(popup&&!popup.closed)popup.close();
-      window.removeEventListener('message',handlePopupMessage);
-      popupTimer=null;
-    },5*60*1000);
+  } catch(e) {}
+  return '';
+}
+
+function storeToken(token) {
+  try {
+    sessionStorage.setItem('ydisk_token', token);
+    localStorage.setItem('ydisk_token', token);
+  } catch(e) {}
+}
+
+TOKEN = getStoredToken();
+
+el('authBtn').onclick = function() {
+  updateStatus('🔐 Открытие окна...');
+  const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  popup = window.open(url, 'YandexAuth', 'width=520,height=700');
+  if (!popup) { showMessage('error', '❌ Разрешите всплывающие окна'); return; }
+  window.addEventListener('message', handlePopupMessage);
+  popupTimer = setTimeout(() => {
+    if (popup && !popup.closed) popup.close();
+    window.removeEventListener('message', handlePopupMessage);
+  }, 5 * 60 * 1000);
+};
+
+function handlePopupMessage(event) {
+  if (event.origin !== window.location.origin || !event.data?.token) return;
+  if (popupTimer) { clearTimeout(popupTimer); popupTimer = null; }
+  addLog(`📨 Токен получен`);
+  verifyToken(event.data.token);
+  if (popup && !popup.closed) popup.close();
+  window.removeEventListener('message', handlePopupMessage);
+}
+
+if (window.location.hash.includes('access_token=')) {
+  const match = window.location.hash.match(/access_token=([^&]+)/);
+  if (match && match[1]) {
+    const token = decodeURIComponent(match[1]);
+    addLog(`🔗 Возврат из OAuth`);
+    verifyToken(token);
+    history.replaceState(null, '', window.location.pathname);
   }
-  
-  function handlePopupMessage(event){
-    if(event.origin!==window.location.origin||!event.data?.token)return;
-    if(popupTimer){
-      clearTimeout(popupTimer);
-      popupTimer=null;
-    }
-    addLog(`📨 Получен токен от popup (длина: ${event.data.token.length})`);
-    verifyTokenAndProceed(event.data.token);
-    if(popup&&!popup.closed)popup.close();
-    window.removeEventListener('message',handlePopupMessage);
-  }
-  
-  if(window.location.hash.includes('access_token=')){
-    const match=window.location.hash.match(/access_token=([^&]+)/);
-    if(match?.[1]){
-      const token=decodeURIComponent(match[1]);
-      addLog(`🔗 Возврат из OAuth: токен получен (длина: ${token.length})`);
-      verifyTokenAndProceed(token);
-      history.replaceState(null,null,window.location.pathname);
-    }
-  }
-  
-  async function verifyTokenAndProceed(token){
-    updateStatus('✅ Проверка токена...');
-    addLog(`🔍 Проверяю токен (длина: ${token?.length||0})`);
-    try{
-      const test = await fetch(`${API}/`, { 
-        headers: { 'Authorization': `OAuth ${token}` },
-        cache: 'no-store'
-      });
-      if(test.ok){
-        TOKEN = token;
-        storeToken(TOKEN);
-        tokenValidated = true;
-        addLog('🔑 Токен принят и сохранён');
-        await onAuthSuccess();
-      } else {
-        const errText = await test.text().catch(()=> '');
-        addLog(`❌ Токен отклонён: ${test.status} ${errText.slice(0,100)}`);
-        logout();
-      }
-    } catch(e){
-      addLog(`❌ Ошибка проверки токена: ${e.message}`);
+}
+
+async function verifyToken(token) {
+  updateStatus('✅ Проверка...');
+  try {
+    const res = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${token}` }, cache: 'no-store' });
+    if (res.ok) {
+      TOKEN = token;
+      storeToken(TOKEN);
+      addLog('🔑 Токен принят');
+      onAuthSuccess();
+    } else {
+      addLog(`❌ Токен отклонён: ${res.status}`);
       logout();
     }
+  } catch(e) {
+    addLog(`❌ Ошибка: ${e.message}`);
+    logout();
   }
+}
 
-  // ========== 🚀 ИНИЦИАЛИЗАЦИЯ ==========
-  window.addEventListener('DOMContentLoaded', async () => {
-    document.getElementById('authPopupBtn').onclick = startOAuthPopup;
-    document.getElementById('browseFolderBtn').onclick = showFolderBrowser;
-    document.getElementById('copyLogBtn').onclick = copyLog;
-    document.getElementById('folder-input').oninput = updateTargetPreview;
-    document.getElementById('links-input').oninput = updateLinksCount;
-    setupFileUpload();
-    updateConnectionStatus();
-    
-    if(TOKEN){
-      addLog('🔍 Токен найден в хранилище, проверяю...');
-      verifyTokenAndProceed(TOKEN).catch(e => {
-        addLog(`⚠️ Фоновая проверка токена: ${e.message}`);
-        updateStatus('Не авторизован');
-      });
-    } else {
-      addLog('⚠️ Требуется авторизация');
-      updateStatus('Не авторизован');
-    }
-  });
-  
-  function updateTargetPreview(){
-    const v=document.getElementById('folder-input').value.trim()||'/saved-materials';
-    document.getElementById('target-preview').textContent=v.startsWith('/')?v:'/'+v;
-  }
-  
-  function updateLinksCount(){
-    const t=document.getElementById('links-input').value;
-    document.getElementById('links-count').textContent=(t.match(/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi)||[]).length;
-  }
-  
-  function copyLog(){
-    const t=document.getElementById('log').innerText;
-    if(!t.trim()){
-      alert('📭 Лог пуст');
-      return;
-    }
-    navigator.clipboard.writeText(t).then(()=>addLog('📋 Лог скопирован'));
-  }
-  
-  async function onAuthSuccess(){
-    showMessage('success','✅ Яндекс.Диск подключён');
-    document.getElementById('user-block').style.display='flex';
-    document.getElementById('copyLogBtn').style.display='block';
-    updateStatus('Авторизация успешна');
-    updateStage(2);
-    goToStep('step-folder');
-    await updateDiskInfoDisplay();
-  }
-  
-  function showMessage(type,text){
-    const c=document.getElementById('auth-message');
-    c.innerHTML='';
-    const d=document.createElement('div');
-    d.className=type==='error'?'error-box':type==='warning'?'warning-box':type==='info'?'info-box':'success-box';
-    d.innerHTML=text;
-    c.appendChild(d);
-    setTimeout(()=>d.remove(),7000);
-  }
-  
-  function updateStatus(msg){
-    document.getElementById('current-status').innerText=msg;
-  }
-  
-  function addLog(msg){
-    const el=document.getElementById('log');
-    el.style.display='block';
-    el.textContent+=`[${new Date().toLocaleTimeString('ru-RU')}] ${msg}\n`;
-    el.scrollTop=el.scrollHeight;
-    console.log(`[YS] ${msg}`);
-  }
-  
-  function logout(){
-    TOKEN='';
-    tokenValidated=false;
-    try{
-      sessionStorage.removeItem('ydisk_token');
-      localStorage.removeItem('ydisk_token');
-    }catch(e){}
-    document.getElementById('user-block').style.display='none';
-    document.getElementById('log').innerHTML='';
-    document.getElementById('log').style.display='none';
-    document.getElementById('copyLogBtn').style.display='none';
-    document.getElementById('folder-browser').style.display='none';
-    updateStatus('🔓 Вы вышли');
-    updateStage(1);
-    goToStep('step-auth');
-    addLog('👋 Сессия завершена');
-    if(popup&&!popup.closed)popup.close();
-    if(popupTimer)clearTimeout(popupTimer);
-    diskInfoCache=null;
-    failedItems=[];
-    updateDiskInfoDisplay();
-  }
+function onAuthSuccess() {
+  showMessage('success', '✅ Яндекс.Диск подключён');
+  el('user-block').style.display = 'flex';
+  updateStatus('Авторизация успешна');
+  goToStep('step-folder');
+  fetchDiskInfo();
+}
 
-  // ========== 💾 ИНФОРМАЦИЯ О ДИСКЕ ==========
-  function formatBytes(bytes){
-    if(bytes==null||bytes===0)return'0 Б';
-    const k=1024;
-    const sizes=['Б','КБ','МБ','ГБ','ТБ','ПБ'];
-    const i=Math.floor(Math.log(bytes)/Math.log(k));
-    return parseFloat((bytes/Math.pow(k,i)).toFixed(2))+' '+sizes[i];
-  }
-  
-  async function getDiskInfo(){
-    try{
-      await throttler.waitIfNeeded();
-      const res=await fetchWithRetry(`${API}/`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
-      if(!res.ok)throw new Error(`HTTP ${res.status}`);
-      const data=await res.json();
-      return{
-        total_space:Number(data.total_space??0),
-        used_space:Number(data.used_space??0),
-        free_space:Number(data.free_space??0)
-      };
-    }catch(e){
-      addLog(`❌ Ошибка получения инфо о диске: ${e.message}`);
-      return{total_space:0,used_space:0,free_space:0};
-    }
-  }
+function logout() {
+  TOKEN = '';
+  try { sessionStorage.removeItem('ydisk_token'); localStorage.removeItem('ydisk_token'); } catch(e) {}
+  el('user-block').style.display = 'none';
+  el('log').innerHTML = '';
+  el('log').style.display = 'none';
+  logs = [];
+  updateStatus('🔓 Вышли');
+  goToStep('step-auth');
+  addLog('👋 Сессия завершена');
+}
 
-  async function updateDiskInfoDisplay(){
-    if(!TOKEN)return;
-    diskInfoCache=await getDiskInfo();
-    ['disk-free','free-space'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(el)el.textContent=formatBytes(diskInfoCache.free_space);
+async function fetchDiskInfo() {
+  try {
+    const res = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
+    if (res.ok) {
+      const d = await res.json();
+      diskInfoCache = d;
+      const free = d.free_space || (d.total_space - d.used_space);
+      el('disk-free').textContent = formatBytes(free);
+      el('free-space').textContent = formatBytes(free);
+      el('disk-total').textContent = formatBytes(d.total_space);
+    }
+  } catch(e) { addLog(`⚠️ Ошибка: ${e.message}`); }
+}
+
+el('browseBtn').onclick = async function() {
+  let p = el('folder-input').value.trim() || '/';
+  if (!p.startsWith('/')) p = '/' + p;
+  await loadFolderContents(normalizePath(p));
+  el('folder-browser').style.display = 'block';
+};
+
+async function loadFolderContents(path) {
+  const div = el('folder-browser');
+  div.innerHTML = '<div style="text-align:center;padding:24px">⏳ Загрузка...</div>';
+  try {
+    const res = await fetch(`${API}/resources?path=${encodeURIComponent(path)}&limit=1000`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = (data._embedded?.items || []).filter(i => i.type === 'dir');
+    div.innerHTML = '';
+    if (path !== '/') {
+      const up = document.createElement('div');
+      up.className = 'folder-item';
+      up.textContent = '📁 .. (вверх)';
+      up.onclick = () => loadFolderContents(normalizePath(path.substring(0, path.lastIndexOf('/')) || '/'));
+      div.appendChild(up);
+    }
+    items.forEach(f => {
+      const d = document.createElement('div');
+      d.className = 'folder-item';
+      d.textContent = `📁 ${f.name}`;
+      d.onclick = () => loadFolderContents(normalizePath(path === '/' ? `/${f.name}` : `${path}/${f.name}`));
+      div.appendChild(d);
     });
-    const totalEl=document.getElementById('disk-total');
-    if(totalEl)totalEl.textContent=formatBytes(diskInfoCache.total_space);
-  }
-
-  // ========== 📁 БРАУЗЕР ПАПОК ==========
-  async function showFolderBrowser(){
-    let p=document.getElementById('folder-input').value.trim()||'/';
-    if(!p.startsWith('/'))p='/'+p;
-    await loadFolderContents(normalizePath(p));
-    document.getElementById('folder-browser').style.display='block';
-  }
-  
-  async function loadFolderContents(path){
-    const div=document.getElementById('folder-browser');
-    div.innerHTML='<div style="text-align:center;padding:24px">⏳ Загрузка...</div>';
-    try{
-      await throttler.waitIfNeeded();
-      const res=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(path)}&limit=1000`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
-      if(!res.ok)throw new Error(`HTTP ${res.status}`);
-      const data=await res.json();
-      const items=(data._embedded?.items||[]).filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name,'ru'));
-      div.innerHTML='';
-      if(path!=='/'){
-        const up=document.createElement('div');
-        up.className='folder-item';
-        up.innerHTML='<span>📁</span><span class="name">.. (вверх)</span>';
-        up.onclick=()=>loadFolderContents(normalizePath(path.substring(0,path.lastIndexOf('/'))||'/'));
-        div.appendChild(up);
-      }
-      if(!items.length){
-        const e=document.createElement('div');
-        e.style.padding='16px';
-        e.style.color='var(--text-light)';
-        e.textContent='📭 Нет подпапок';
-        div.appendChild(e);
-      }else{
-        for(const f of items){
-          const d=document.createElement('div');
-          d.className='folder-item';
-          d.innerHTML=`<span>📁</span><span class="name">${f.name}</span>`;
-          d.onclick=()=>loadFolderContents(normalizePath(path==='/'?`/${f.name}`:`${path}/${f.name}`));
-          div.appendChild(d);
-        }
-      }
-      const actions=document.createElement('div');
-      actions.style.marginTop='16px';
-      actions.style.display='flex';
-      actions.style.gap='10px';
-      const sel=document.createElement('button');
-      sel.textContent=`✅ Выбрать: ${path}`;
-      sel.className='new-folder-btn';
-      sel.style.margin='0';
-      sel.onclick=()=>{
-        document.getElementById('folder-input').value=path;
-        updateTargetPreview();
-        div.style.display='none';
-        validateAndCreateFolder();
-      };
-      const neu=document.createElement('button');
-      neu.textContent='+ Новая папка';
-      neu.className='new-folder-btn';
-      neu.style.background='#666';
-      neu.style.margin='0';
-      neu.onclick=()=>showNewFolderModal(path);
-      actions.appendChild(sel);
-      actions.appendChild(neu);
-      div.appendChild(actions);
-    }catch(e){
-      div.innerHTML=`<div style="color:var(--error);padding:16px;text-align:center">❌ ${e.message}</div>`;
-    }
-  }
-  
-  function showNewFolderModal(parent){
-    const m=document.getElementById('newFolderModal');
-    const inp=document.getElementById('newFolderName');
-    inp.value='';
-    inp.focus();
-    m.style.display='flex';
-    const confirm=async()=>{
-      const name=inp.value.trim();
-      if(!name)return;
-      const np=normalizePath(parent==='/'?`/${name}`:`${parent}/${name}`);
-      try{
-        await throttler.waitIfNeeded();
-        const r=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(np)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});
-        if(r.status===201||r.status===200){
-          addLog(`📁 Создана: ${np}`);
-          await loadFolderContents(parent);
-        }else if(r.status===409){
-          showMessage('warning',`⚠️ Папка "${name}" уже существует`);
-        }else{
-          addLog(`❌ Ошибка: ${r.status}`);
-        }
-      }catch(e){
-        addLog(`❌ ${e.message}`);
-      }finally{
-        m.style.display='none';
-      }
+    const sel = document.createElement('button');
+    sel.textContent = `✅ Выбрать: ${path}`;
+    sel.style.marginTop = '16px';
+    sel.style.background = 'var(--success)';
+    sel.onclick = () => {
+      TARGET_FOLDER = normalizePath(path);
+      el('folder-input').value = TARGET_FOLDER;
+      el('target-preview').textContent = TARGET_FOLDER;
+      div.style.display = 'none';
+      el('btn-next').style.display = 'block';
+      addLog(`📁 Выбрана: ${TARGET_FOLDER}`);
     };
-    document.getElementById('confirmNewFolderBtn').onclick=confirm;
-    document.getElementById('cancelNewFolderBtn').onclick=()=>m.style.display='none';
-    inp.onkeydown=e=>{if(e.key==='Enter')confirm();};
+    div.appendChild(sel);
+  } catch(e) {
+    div.innerHTML = `<div style="color:var(--error);padding:16px">❌ ${e.message}</div>`;
   }
+}
 
-  // ========== ✅ ПРОВЕРКА/СОЗДАНИЕ ПАПКИ ==========
-  async function validateAndCreateFolder(){
-    let input=document.getElementById('folder-input').value.trim();
-    if(!input||input==='/'){
-      input='/saved-materials';
-      document.getElementById('folder-input').value=input;
-    }
-    TARGET_FOLDER=normalizePath(input);
-    if(!TARGET_FOLDER.startsWith('/'))TARGET_FOLDER='/'+TARGET_FOLDER;
-    addLog(`📁 Проверка: ${TARGET_FOLDER}`);
-    updateStatus('🔍 Проверяю папку...');
-    try{
-      await throttler.waitIfNeeded();
-      const check=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
-      if(check.status===404){
-        addLog('📭 Создаю папку...');
-        await throttler.waitIfNeeded();
-        const cr=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(TARGET_FOLDER)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});
-        if(!cr.ok&&cr.status!==409)throw new Error(`Не удалось создать (${cr.status})`);
-        addLog(cr.status===409?'⚠️ Создана параллельно':'✅ Создана');
-      }else if(!check.ok){
-        throw new Error(`Ошибка: ${check.status}`);
-      }else{
-        addLog('✅ Уже существует');
-      }
-      document.getElementById('folder-status').innerHTML=`✅ Готово: <strong>${TARGET_FOLDER}</strong>`;
-      document.getElementById('btn-next-links').style.display='block';
-      document.getElementById('target-preview').textContent=TARGET_FOLDER;
-      updateStatus(`📁 Папка готова`);
-      updateStage(2);
-    }catch(e){
-      document.getElementById('folder-status').innerHTML=`❌ ${e.message}`;
-      addLog(`❌ ${e.message}`);
-      updateStatus(`❌ ${e.message}`);
-    }
-  }
+function extractLinks(text) {
+  const regex = /https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi;
+  const found = text.match(regex) || [];
+  return [...new Set(found)];
+}
 
-  // ========== 🔗 ИЗВЛЕЧЕНИЕ ССЫЛОК & ЗАГРУЗКА ФАЙЛА ==========
-  function extractAllPublicLinks(text){
-    const regex=/https?:\/\/(?:disk\.yandex\.(?:ru|com)|yadi\.sk)\/[^\s<>"']+/gi;
-    const found=text.match(regex)||[];
-    const unique=[...new Set(found.map(u=>{
-      try{
-        const url=new URL(u);
-        return`${url.protocol}//${url.host}${url.pathname}`;
-      }catch{
-        return u;
-      }
-    }))];
-    unique.forEach(u=>addLog(`🔗 Найдена: ${u}`));
-    return unique;
-  }
-  
-  function setupFileUpload(){
-    const area=document.getElementById('fileUploadArea');
-    const input=document.getElementById('fileInput');
-    area.addEventListener('click',(e)=>{
-      if(e.target===area||e.target.classList.contains('hint'))input.click();
-    });
-    input.addEventListener('change',async(e)=>{
-      const file=e.target.files[0];
-      if(file)await handleFileUpload(file);
-      input.value='';
-    });
-    area.addEventListener('dragover',(e)=>{
-      e.preventDefault();
-      area.classList.add('dragover');
-    });
-    area.addEventListener('dragleave',()=>area.classList.remove('dragover'));
-    area.addEventListener('drop',async(e)=>{
-      e.preventDefault();
-      area.classList.remove('dragover');
-      const file=e.dataTransfer.files[0];
-      if(file)await handleFileUpload(file);
-    });
-  }
-  
-  async function handleFileUpload(file){
-    addLog(`📎 Загружен файл: ${file.name}`);
-    try{
-      const text=await file.text();
-      const links=extractAllPublicLinks(text);
-      if(links.length===0){
-        showMessage('warning',`⚠️ В файле "${file.name}" не найдено ссылок`);
-        return;
-      }
-      const textarea=document.getElementById('links-input');
-      const existing=textarea.value.trim();
-      textarea.value=existing?`${existing}\n${links.join('\n')}`:links.join('\n');
-      updateLinksCount();
-      showMessage('success',`✅ Извлечено ${links.length} ссылок из ${file.name}`);
-    }catch(e){
-      showMessage('error',`❌ Ошибка чтения файла: ${e.message}`);
-    }
-  }
+el('links-input').oninput = function() {
+  const links = extractLinks(this.value);
+  stats.totalLinks = links.length;
+  el('links-count').textContent = links.length;
+};
 
-  // ========== 📤 СКАЧИВАНИЕ ОТЧЕТА (ЗАГЛУШКА) ==========
-  function downloadReport(){
-    if(failedItems.length===0){
-      showMessage('info','ℹ️ Нет ошибок для отчета');
-      return;
-    }
-    const dateStr=new Date().toLocaleString('ru-RU');
-    let content=`# 📄 Отчет об ошибках - Yandex Saver\n`;
-    content+=`# 📅 Дата: ${dateStr}\n# 📁 Цель: ${TARGET_FOLDER}\n# ❌ Всего ошибок: ${failedItems.length}\n\n`;
-    content+=`# Формат: Ссылка/путь/к/файлу | Целевой путь | Ошибка (попытка/всего)\n`;
-    content+=`# =========================================\n`;
-    failedItems.forEach((item,i)=>{
-      const fullPath=`${item.sourceUrl}${item.publicPath}`;
-      content+=`${i+1}. ${fullPath} | ${item.targetPath} | ${item.errorCode}: ${item.errorMessage} (попытка ${item.attempt}/${item.maxRetries})\n`;
-    });
-    content+=`\n# 🔗 Уникальные ссылки-источники с ошибками (для повторной загрузки):\n`;
-    const uniqueLinks=[...new Set(failedItems.map(i=>i.sourceUrl))];
-    content+=uniqueLinks.join('\n');
-    const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=`yandex-saver-errors-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showMessage('success',`📥 Отчет скачан: ${failedItems.length} ошибок`);
+function generateReport() {
+  const total = stats.successCount + stats.duplicateCount + stats.errorCount;
+  const rate = total > 0 ? ((stats.successCount / total) * 100).toFixed(1) : '0.0';
+  let html = `<div class="report-header"><strong>📊 Статистика v${APP_VERSION}</strong><br>`;
+  html += `Ссылок: ${stats.totalLinks} | Папок: ${stats.foldersProcessed} | Файлов: ${stats.totalFiles} (${formatBytes(stats.totalSize)})<br>`;
+  html += `Успешно: ${stats.successCount} (${formatBytes(stats.successSize)}) | Дубли: ${stats.duplicateCount} (${formatBytes(stats.duplicateSize)}) | Ошибки: ${stats.errorCount} (${formatBytes(stats.errorSize)})<br>`;
+  html += `Эффективность: ${rate}%</div>`;
+  if (stats.errorFiles.length > 0) {
+    html += `<div class="report-section"><h3>❌ Ошибки</h3><ul>`;
+    stats.errorFiles.forEach((f, i) => { html += `<li>${i+1}. ${f.name} <span class="file-size">${f.size ? formatBytes(f.size) : '?'}</span><br><small>${f.reason}</small></li>`; });
+    html += `</ul></div>`;
   }
+  if (stats.duplicateFiles.length > 0) {
+    html += `<div class="report-section"><h3>🔄 Дубликаты</h3><ul>`;
+    stats.duplicateFiles.forEach((f, i) => { html += `<li>${i+1}. ${f.name} <span class="file-size">${f.size ? formatBytes(f.size) : '?'}</span></li>`; });
+    html += `</ul></div>`;
+  }
+  if (stats.successFiles.length > 0) {
+    html += `<div class="report-section"><h3>✅ Успешно</h3><ul>`;
+    stats.successFiles.forEach(f => { html += `<li>${f.name} <span class="file-size">${f.size ? formatBytes(f.size) : '?'}</span></li>`; });
+    html += `</ul></div>`;
+  }
+  return html;
+}
 
-  // ========== 🛠️ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-  function normalizePath(p){
-    if(!p)return'/';
-    return p.replace(/\/+/g,'/').replace(/\/$/,'')||'/';
-  }
-  
-  async function ensureFolderExists(path){
-    const np=normalizePath(path);
-    if(np==='/')return true;
-    await throttler.waitIfNeeded();
-    const res=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(np)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
-    if(res.status===404){
-      const parent=np.substring(0,np.lastIndexOf('/'))||'/';
-      await ensureFolderExists(parent);
-      await throttler.waitIfNeeded();
-      const cr=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(np)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});
-      if(!cr.ok&&cr.status!==409)throw new Error(`Не создать ${np}`);
-      addLog(`📁 Создана: ${np}`);
-      return true;
-    }else if(!res.ok){
-      throw new Error(`Ошибка ${np}: ${res.status}`);
-    }
-    return true;
-  }
-  
-  function getDirFromPublicPath(filePath){
-    if(!filePath||filePath==='/')return'';
-    const parts=filePath.split('/').filter(p=>p&&p.trim());
-    if(parts.length<=1)return'';
-    return parts.slice(0,-1).join('/');
-  }
-  
-  async function fileExistsAtPath(fullPath){
-    try{
-      await throttler.waitIfNeeded();
-      const res=await fetchWithRetry(`${API}/resources?path=${encodeURIComponent(fullPath)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});
-      return res.status===200;
-    }catch(e){
-      return false;
-    }
-  }
+function showReport() { el('reportBody').innerHTML = generateReport(); el('reportModal').style.display = 'flex'; }
+function closeReport() { el('reportModal').style.display = 'none'; }
 
-  // ========== 🔁 ТРОТТЛЕР ==========
-  class RequestThrottler {
-    constructor(maxPerSecond = 3) {
-      this.maxPerSecond = maxPerSecond;
-      this.timestamps = [];
-      this.minInterval = 1000 / maxPerSecond;
-    }
-    async waitIfNeeded() {
-      const now = Date.now();
-      this.timestamps = this.timestamps.filter(t => now - t < 1000);
-      if (this.timestamps.length >= this.maxPerSecond) {
-        const oldest = Math.min(...this.timestamps);
-        const waitTime = Math.max(0, 1000 - (now - oldest) + this.minInterval);
-        if (waitTime > 0) {
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-      }
-      this.timestamps.push(Date.now());
-    }
+async function ensureFolderExists(path) {
+  const np = normalizePath(path);
+  if (np === '/') return;
+  try { await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } }); }
+  catch {
+    const parent = normalizePath(np.substring(0, np.lastIndexOf('/')) || '/');
+    await ensureFolderExists(parent);
+    await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } });
+    addLog(`📁 Создана: ${np}`);
   }
-  const throttler = new RequestThrottler(3);
+}
 
-  // ========== 🔁 ПОВТОРНЫЕ ПОПЫТКИ ==========
-  async function fetchWithRetry(url, options, maxRetries = 5) {
-    let lastError, lastResponse;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        if (!tokenValidated && (attempt === 1 || lastResponse?.status === 401 || lastResponse?.status === 403)) {
-          addLog(`🔍 Проверка токена (попытка ${attempt})...`);
-          const tokenCheck = await fetch(`${API}/`, { 
-            headers: { 'Authorization': `OAuth ${TOKEN}` },
-            cache: 'no-store'
-          });
-          if (!tokenCheck.ok) {
-            addLog(`❌ Токен недействителен: ${tokenCheck.status}`);
-            throw new Error(`Token invalid: ${tokenCheck.status}`);
-          }
-          tokenValidated = true;
-          addLog('✅ Токен подтверждён');
-        }
-        const safeUrl = url.replace(/\?path=([^&]+)/, (m, p) => `?path=${encodeURIComponent(decodeURIComponent(p))}`);
-        await throttler.waitIfNeeded();
-        const response = await fetch(safeUrl, { ...options, signal: abortController?.signal });
-        lastResponse = response;
-        if (response.ok || response.status === 202) return response;
-        if (response.status === 401 || response.status === 403) {
-          tokenValidated = false;
-          addLog(`⚠️ Токен отклонён (${response.status}), повторная проверка при следующей попытке`);
-        }
-        if (response.status === 404 && attempt < maxRetries) {
-          const delay = Math.pow(2, attempt) * 1000;
-          const errorBody = await response.clone().text().catch(() => '');
-          addLog(`⚠️ Попытка ${attempt}/${maxRetries}: 404, задержка ${delay/1000}с`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        return response;
-      } catch (e) {
-        lastError = e;
-        if (attempt < maxRetries && (e.name === 'TypeError' || e.message.includes('Failed to fetch') || !navigator.onLine || e.message.includes('404') || e.message.includes('Token'))) {
-          const delay = Math.pow(2, attempt) * 1000;
-          addLog(`⚠️ Попытка ${attempt}/${maxRetries}: ${e.message.slice(0,60)}..., задержка ${delay/1000}с`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        throw e;
-      }
+function getDirFromPublicPath(filePath) {
+  if (!filePath || filePath === '/') return '';
+  const parts = filePath.split('/').filter(p => p && p.trim());
+  return parts.length <= 1 ? '' : parts.slice(0, -1).join('/');
+}
+
+async function fileExistsAtPath(fullPath) {
+  try {
+    const res = await fetch(`${API}/resources?path=${encodeURIComponent(fullPath)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
+    return res.status === 200;
+  } catch { return false; }
+}
+
+class Throttler {
+  constructor(maxPerSec = 3) { this.max = maxPerSec; this.timestamps = []; }
+  async wait() {
+    const now = Date.now();
+    this.timestamps = this.timestamps.filter(t => now - t < 1000);
+    if (this.timestamps.length >= this.max) {
+      const oldest = Math.min(...this.timestamps);
+      await new Promise(r => setTimeout(r, Math.max(0, 1000 - (now - oldest) + 100)));
     }
-    if (lastResponse?.status === 404) {
-      const body = await lastResponse.text().catch(() => '');
-      addLog(`❌ После ${maxRetries} попыток: 404 | Ответ: ${body.slice(0,200)}`);
-    }
-    throw lastError || new Error('Неизвестная ошибка после повторных попыток');
+    this.timestamps.push(Date.now());
   }
+}
+const throttler = new Throttler(3);
 
-  // ========== 💾 СОХРАНЕНИЕ ФАЙЛА ==========
-  async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
-    if (!isRunning) throw new Error('Остановлено');
-    const fullPath = normalizePath(`${targetPath}/${fileName}`);
-    if (await fileExistsAtPath(fullPath)) {
-      addLog(`⏭ Уже существует: ${fileName}`);
-      return { skipped: true, reason: 'exists' };
-    }
-    updateStatus(`💾 ${fileName}`); 
-    addLog(`⬇️ Сохраняю: ${fileName}`);
-    const params = new URLSearchParams({ 
-      public_key: publicKey, 
-      path: filePathInPublic, 
-      save_path: normalizePath(targetPath), 
-      name: fileName 
-    });
-    const response = await fetchWithRetry(`${API}/public/resources/save-to-disk?${params}`, { 
-      method: 'POST', 
-      headers: { 'Authorization': `OAuth ${TOKEN}` } 
-    });
-    if (response.status === 202) { 
-      addLog(`⏳ В очереди: ${fileName}`); 
-      return { saved: true }; 
-    }
-    if (!response.ok) {
-      const t = await response.text().catch(() => '');
-      failedItems.push({ 
-        sourceUrl, 
-        publicPath: filePathInPublic, 
-        fileName, 
-        targetPath: fullPath, 
-        errorCode: response.status, 
-        errorMessage: t.slice(0, 200), 
-        attempt: 5, 
-        maxRetries: 5 
-      });
-      throw new Error(`API ${response.status}: ${t.slice(0, 200)}`);
-    }
-    const result = await response.json();
-    if (result.href || result.path || result.name) {
-      addLog(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`);
-      return { saved: true };
-    }
-    throw new Error('Неожиданный ответ API');
+async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
+  if (!isRunning) throw new Error('Остановлено');
+  const fullPath = normalizePath(`${targetPath}/${fileName}`);
+  if (await fileExistsAtPath(fullPath)) {
+    addLog(`⏭ Уже: ${fileName}`);
+    stats.duplicateCount++;
+    stats.duplicateSize += 0;
+    stats.duplicateFiles.push({ name: fileName, url: sourceUrl, size: 0 });
+    return { skipped: true };
   }
-
-  // ========== 📂 ОБРАБОТКА ПАПОК ==========
-  async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl) {
-    if (!isRunning) throw new Error('Остановлено');
-    const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
-    addLog(`📁 Обработка папки "${publicFolderName}" → ${rootTargetPath}`);
-    updateStatus(`📂 ${publicFolderName}`);
-    await ensureFolderExists(rootTargetPath);
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
-    while (url && isRunning) {
-      const resp = await fetchWithRetry(url, { signal: abortController?.signal });
-      if (!resp.ok) throw new Error(`Не прочитать папку: ${resp.status}`);
-      const data = await resp.json();
-      const items = data._embedded?.items || data.items || [];
-      if (items.length) addLog(`📊 Найдено: ${items.filter(i=>i.type==='file').length} файлов, ${items.filter(i=>i.type==='dir').length} папок`);
-      for (const item of items) {
-        if (!isRunning) throw new Error('Остановлено');
-        if (processedPublicPaths.has(item.path)) { 
-          addLog(`⚠️ Пропуск: ${item.path}`); 
-          continue; 
-        }
-        processedPublicPaths.add(item.path);
-        const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-        const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
-        if (item.type === 'file') {
-          const dirInPublic = getDirFromPublicPath(item.path);
-          const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-          try { 
-            await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); 
-          } catch (e) { 
-            addLog(`❌ Ошибка сохранения ${item.name}: ${e.message}`); 
-          }
-        } else if (item.type === 'dir') {
-          await ensureFolderExists(itemTargetPath); 
-          addLog(`📁 Создана: ${itemTargetPath}`);
-          const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
-          await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
-        }
-      }
-      url = data._embedded?.next || data.next || null;
-      if (url) addLog(`🔄 Следующая страница...`);
-    }
+  updateStatus(`💾 ${fileName}`);
+  addLog(`⬇️ Сохраняю: ${fileName}`);
+  const params = new URLSearchParams({ public_key: publicKey, path: filePathInPublic, save_path: normalizePath(targetPath), name: fileName });
+  const response = await fetch(`${API}/public/resources/save-to-disk?${params}`, { method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` } });
+  if (response.status === 202 || response.ok) {
+    addLog(`✅ Сохранено: ${fileName}`);
+    stats.successCount++;
+    stats.successSize += 0;
+    stats.successFiles.push({ name: fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 });
+    return { saved: true };
   }
+  const text = await response.text().catch(() => '');
+  stats.errorCount++;
+  stats.errorSize += 0;
+  stats.errorFiles.push({ name: fileName, url: sourceUrl, reason: `API ${response.status}: ${text.slice(0,100)}`, size: 0 });
+  failedItems.push({ sourceUrl, publicPath: filePathInPublic, fileName, targetPath: fullPath, errorCode: response.status, errorMessage: text.slice(0,200) });
+  throw new Error(`API ${response.status}`);
+}
 
-  async function processSubFolderContents(url, publicKey, rootTargetPath, sourceUrl) {
-    if (!isRunning) return;
-    const resp = await fetchWithRetry(url, { signal: abortController?.signal });
-    if (!resp.ok) throw new Error(`Не прочитать подпапку: ${resp.status}`);
-    const data = await resp.json(); 
+async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl) {
+  if (!isRunning) throw new Error('Остановлено');
+  const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
+  addLog(`📁 Обработка: "${publicFolderName}"`);
+  updateStatus(`📂 ${publicFolderName}`);
+  stats.foldersProcessed++;
+  await ensureFolderExists(rootTargetPath);
+  let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
+  while (url && isRunning) {
+    await throttler.wait();
+    const resp = await fetch(url, { signal: abortController?.signal });
+    if (!resp.ok) throw new Error(`Ошибка: ${resp.status}`);
+    const data = await resp.json();
     const items = data._embedded?.items || data.items || [];
     for (const item of items) {
       if (!isRunning) throw new Error('Остановлено');
       if (processedPublicPaths.has(item.path)) continue;
       processedPublicPaths.add(item.path);
       if (item.type === 'file') {
+        stats.totalFiles++;
+        stats.totalSize += (item.size || 0);
         const dirInPublic = getDirFromPublicPath(item.path);
         const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
-        try { 
-          await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); 
-        } catch (e) { 
-          addLog(`❌ Ошибка сохранения ${item.name}: ${e.message}`); 
-        }
+        try { await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); }
+        catch (e) { addLog(`❌ Ошибка ${item.name}: ${e.message}`); }
       } else if (item.type === 'dir') {
-        const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
-        const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
-        await ensureFolderExists(itemTargetPath); 
-        addLog(`📁 Создана: ${itemTargetPath}`);
+        const relPath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
+        const itemTargetPath = normalizePath(`${rootTargetPath}/${relPath}`);
+        await ensureFolderExists(itemTargetPath);
         const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
         await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
       }
     }
-    const nextUrl = data._embedded?.next || data.next || null;
-    if (nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath, sourceUrl);
+    url = data._embedded?.next || data.next || null;
   }
+}
 
-  // ========== 🔗 ОБРАБОТКА ОДНОЙ ССЫЛКИ ==========
-  async function processPublicLink(publicUrl, targetBasePath) {
-    processedPublicPaths.clear();
-    const metaResp = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, { signal: abortController?.signal });
-    if (!metaResp.ok) {
-      failedItems.push({ 
-        sourceUrl: publicUrl, 
-        publicPath: '/', 
-        fileName: '(корень)', 
-        targetPath: TARGET_FOLDER, 
-        errorCode: metaResp.status, 
-        errorMessage: 'Недоступна публичная ссылка', 
-        attempt: 5, 
-        maxRetries: 5 
-      });
-      throw new Error(`Недоступно (${metaResp.status}): ${publicUrl}`);
+async function processSubFolderContents(url, publicKey, rootTargetPath, sourceUrl) {
+  if (!isRunning) return;
+  await throttler.wait();
+  const resp = await fetch(url, { signal: abortController?.signal });
+  if (!resp.ok) throw new Error(`Ошибка: ${resp.status}`);
+  const data = await resp.json();
+  const items = data._embedded?.items || data.items || [];
+  for (const item of items) {
+    if (!isRunning) throw new Error('Остановлено');
+    if (processedPublicPaths.has(item.path)) continue;
+    processedPublicPaths.add(item.path);
+    if (item.type === 'file') {
+      stats.totalFiles++;
+      stats.totalSize += (item.size || 0);
+      const dirInPublic = getDirFromPublicPath(item.path);
+      const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
+      try { await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); }
+      catch (e) { addLog(`❌ Ошибка ${item.name}: ${e.message}`); }
+    } else if (item.type === 'dir') {
+      const relPath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
+      const itemTargetPath = normalizePath(`${rootTargetPath}/${relPath}`);
+      await ensureFolderExists(itemTargetPath);
+      const subUrl = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&path=${encodeURIComponent(item.path)}&limit=1000`;
+      await processSubFolderContents(subUrl, publicKey, rootTargetPath, sourceUrl);
     }
-    const meta = await metaResp.json();
-    if (meta.type === 'file') {
-      addLog(`📄 Файл: ${meta.name}`);
-      return (await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name, publicUrl))?.skipped ? { skipped: true } : { saved: true };
-    } else if (meta.type === 'dir' || meta._embedded?.items) {
-      const publicFolderName = meta.name || 'Без имени';
-      addLog(`📁 Папка: "${publicFolderName}"`);
-      await processPublicFolder(publicUrl, targetBasePath, publicFolderName, publicUrl);
-      return { saved: true };
-    } else throw new Error(`Неизвестный тип: ${meta.type}`);
   }
+  const nextUrl = data._embedded?.next || data.next || null;
+  if (nextUrl && isRunning) await processSubFolderContents(nextUrl, publicKey, rootTargetPath, sourceUrl);
+}
 
-  // ========== 🚀 ОСНОВНОЙ ПРОЦЕСС ==========
-  async function startProcess() {
-    const raw = document.getElementById('links-input').value.trim(); 
-    if (!raw) return alert('⚠️ Вставьте ссылки');
-    updateStage(4);
-    const links = extractAllPublicLinks(raw); 
-    if (!links.length) return alert('❌ Нет корректных ссылок');
-    if (!TARGET_FOLDER) { 
-      await validateAndCreateFolder(); 
-      if (!TARGET_FOLDER) return alert('❌ Укажите папку'); 
-    }
-    failedItems = [];
-    await updateDiskInfoDisplay();
-    document.getElementById('scan-status').classList.add('active'); 
-    updateStatus('⏳ Сканирую размер...'); 
-    addLog('🔍 Сканирую публичные ресурсы для расчёта размера...');
-    let totalRequiredSize = 0;
-    for (const link of links) {
-      try {
-        await throttler.waitIfNeeded();
-        const metaResp = await fetchWithRetry(`${API}/public/resources?public_key=${encodeURIComponent(link)}&limit=1000`);
-        if (!metaResp.ok) continue; 
-        const meta = await metaResp.json();
-        if (meta.type === 'file' && meta.size) totalRequiredSize += meta.size;
-        else if (meta.type === 'dir' || meta._embedded?.items) { 
-          const sizeInfo = await calculatePublicFolderSize(link); 
-          totalRequiredSize += sizeInfo.totalSize; 
-          addLog(`📊 "${meta.name || 'папка'}": ${sizeInfo.fileCount} файлов, ${formatBytes(sizeInfo.totalSize)}`); 
-        }
-      } catch (e) { 
-        addLog(`⚠️ Не удалось просканировать ${link}: ${e.message}`); 
+async function processPublicLink(publicUrl, targetBasePath) {
+  processedPublicPaths.clear();
+  const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(publicUrl)}`, { signal: abortController?.signal });
+  if (!metaResp.ok) {
+    stats.errorCount++;
+    stats.errorFiles.push({ name: '(корень)', url: publicUrl, reason: `Недоступна (${metaResp.status})`, size: 0 });
+    throw new Error(`Недоступно (${metaResp.status})`);
+  }
+  const meta = await metaResp.json();
+  if (meta.type === 'file') {
+    addLog(`📄 Файл: ${meta.name}`);
+    stats.totalFiles++;
+    stats.totalSize += (meta.size || 0);
+    return (await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name, publicUrl))?.skipped ? { skipped: true } : { saved: true };
+  } else if (meta.type === 'dir' || meta._embedded?.items) {
+    const publicFolderName = meta.name || 'Без имени';
+    addLog(`📁 Папка: "${publicFolderName}"`);
+    await processPublicFolder(publicUrl, targetBasePath, publicFolderName, publicUrl);
+    return { saved: true };
+  }
+  throw new Error(`Неизвестный тип: ${meta.type}`);
+}
+
+async function calculatePublicFolderSize(publicKey) {
+  let totalSize = 0;
+  let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=1000`;
+  while (url && isRunning) {
+    try {
+      await throttler.wait();
+      const resp = await fetch(url);
+      if (!resp.ok) break;
+      const data = await resp.json();
+      const items = data._embedded?.items || data.items || [];
+      for (const item of items) {
+        if (item.type === 'file' && item.size) totalSize += item.size;
       }
+      url = data._embedded?.next || data.next || null;
+    } catch (e) { break; }
+  }
+  return totalSize;
+}
+
+async function startProcess() {
+  stats.foldersProcessed = 0; stats.totalFiles = 0; stats.totalSize = 0;
+  stats.successCount = 0; stats.successSize = 0; stats.successFiles = [];
+  stats.duplicateCount = 0; stats.duplicateSize = 0; stats.duplicateFiles = [];
+  stats.errorCount = 0; stats.errorSize = 0; stats.errorFiles = [];
+  failedItems = [];
+  
+  const raw = el('links-input').value.trim();
+  if (!raw) { alert('⚠️ Вставьте ссылки'); return; }
+  const links = extractLinks(raw);
+  if (!links.length) { alert('❌ Нет ссылок'); return; }
+  stats.totalLinks = links.length;
+  el('links-count').textContent = links.length;
+  
+  if (!TARGET_FOLDER) TARGET_FOLDER = normalizePath(el('folder-input').value.trim() || '/saved-materials');
+  
+  await fetchDiskInfo();
+  
+  // Расчёт размера
+  el('required-space').textContent = '⏳...';
+  let totalRequiredSize = 0;
+  for (const link of links) {
+    try {
+      const metaResp = await fetch(`${API}/public/resources?public_key=${encodeURIComponent(link)}`);
+      if (!metaResp.ok) continue;
+      const meta = await metaResp.json();
+      if (meta.type === 'file' && meta.size) totalRequiredSize += meta.size;
+      else if (meta.type === 'dir') totalRequiredSize += await calculatePublicFolderSize(link);
+    } catch (e) {}
+  }
+  el('required-space').textContent = formatBytes(totalRequiredSize);
+  
+  isRunning = true;
+  abortController = new AbortController();
+  processedPublicPaths.clear();
+  el('btn-start').disabled = true;
+  el('btn-stop').style.display = 'block';
+  el('progress').style.width = '0%';
+  addLog(`🚀 Старт: ${links.length} ссылок`);
+  updateStatus(`⏳ 1/${links.length}`);
+  
+  await ensureFolderExists(TARGET_FOLDER);
+  
+  let success = 0, skipped = 0, errors = 0;
+  for (let i = 0; i < links.length; i++) {
+    if (!isRunning) break;
+    const progress = Math.round((i / links.length) * 100);
+    el('progress').style.width = `${progress}%`;
+    updateStatus(`⏳ ${i+1}/${links.length}`);
+    try {
+      const result = await processPublicLink(links[i], TARGET_FOLDER);
+      if (result?.skipped) skipped++; else success++;
+      addLog(`✅ Ссылка #${i+1}`);
+    } catch(e) {
+      if (e.message === 'Остановлено') { addLog('⏹ Остановлено'); break; }
+      errors++;
+      addLog(`❌ #${i+1}: ${e.message}`);
     }
-    document.getElementById('scan-status').classList.remove('active'); 
-    document.getElementById('required-space').textContent = formatBytes(totalRequiredSize); 
-    addLog(`📦 Общий размер: ${formatBytes(totalRequiredSize)}`);
-    const freeSpace = diskInfoCache?.free_space || 0;
-    if (totalRequiredSize > freeSpace && freeSpace > 0) { 
-      const confirm = window.confirm(`⚠️ Недостаточно места!\nНужно: ${formatBytes(totalRequiredSize)}\nСвободно: ${formatBytes(freeSpace)}\n\nПродолжить?`); 
-      if (!confirm) { 
-        updateStatus('❌ Отменено пользователем'); 
-        return; 
-      } 
-      addLog('⚠️ Пользователь подтвердил продолжение при нехватке места'); 
-    } else if (freeSpace > 0) {
-      addLog(`✅ Места достаточно: ${formatBytes(freeSpace)} свободно, нужно ${formatBytes(totalRequiredSize)}`);
-    }
-    isRunning = true; 
-    abortController = new AbortController(); 
-    processedPublicPaths.clear();
-    document.getElementById('btn-start').disabled = true; 
-    document.getElementById('btn-stop').style.display = 'block';
-    document.getElementById('progress-fill').style.width = '0%'; 
-    document.getElementById('progress-text').innerText = '';
-    document.getElementById('btn-download-report').style.display = 'none';
-    addLog(`🚀 Старт: ${links.length} ссылок | 📁 ${TARGET_FOLDER}`); 
-    updateStatus(`⏳ 1/${links.length}...`);
-    let success = 0, skipped = 0, errors = 0;
-    for (let i = 0; i < links.length; i++) {
-      if (!isRunning) break;
-      const progress = Math.round((i / links.length) * 100); 
-      document.getElementById('progress-fill').style.width = `${progress}%`;
-      document.getElementById('progress-text').innerText = `Обработка: ${i+1}/${links.length}`;
-      updateStatus(`⏳ ${i+1}/${links.length}: ${links[i].slice(0,40)}${links[i].length>40?'...':''}`);
-      try { 
-        const result = await processPublicLink(links[i], TARGET_FOLDER); 
-        if (result?.skipped) skipped++; 
-        else success++; 
-        addLog(`✅ Ссылка #${i+1}`); 
-      } catch (e) { 
-        if (e.name === 'AbortError' || e.message === 'Остановлено') { 
-          addLog('⏹ Остановлено'); 
-          break; 
-        } 
-        errors++; 
-        addLog(`❌ #${i+1}: ${e.message}`); 
-        updateStatus(`❌ ${e.message}`); 
-      }
-      if (!tokenValidated && TOKEN) {
-        addLog('🔍 Фоновая проверка токена во время паузы...');
-        try {
-          const check = await fetch(`${API}/`, { headers: { 'Authorization': `OAuth ${TOKEN}` }, cache: 'no-store' });
-          if (check.ok) { 
-            tokenValidated = true; 
-            addLog('✅ Токен подтверждён в фоне'); 
-          } else { 
-            addLog(`⚠️ Токен требует обновления: ${check.status}`); 
-            tokenValidated = false; 
-          }
-        } catch(e) { 
-          addLog(`⚠️ Не удалось проверить токен в фоне: ${e.message}`); 
-        }
-      }
-      await new Promise(r => setTimeout(r, 500));
-    }
-    document.getElementById('progress-fill').style.width = '100%'; 
-    document.getElementById('progress-text').innerText = `✅ Готово: ${success}/${links.length}`;
-    document.getElementById('btn-start').disabled = false; 
-    document.getElementById('btn-stop').style.display = 'none'; 
-    isRunning = false;
-    if (failedItems.length > 0) document.getElementById('btn-download-report').style.display = 'block';
-    let summary = `✅ Готово: ${success} сохранено`; 
-    if (skipped > 0) summary += `, ${skipped} пропущено (дубли)`; 
-    if (errors > 0) summary += `, ${errors} ошибок`;
-    updateStatus(summary); 
-    addLog(`🎉 Завершено: ${success} сохранено, ${skipped} дублей пропущено, ${errors} ошибок, ${failedItems.length} записано в отчет`);
-    if (errors === 0 && skipped === 0 && failedItems.length === 0) showMessage('success', summary); 
-    else if (errors === 0) showMessage('info', summary); 
-    else showMessage('warning', summary);
+    await new Promise(r => setTimeout(r, 500));
   }
   
-  async function calculatePublicFolderSize(publicKey, limit = 1000) {
-    let totalSize = 0; 
-    let fileCount = 0; 
-    let folderCount = 0; 
-    let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=${limit}`;
-    while (url && isRunning) { 
-      try { 
-        await throttler.waitIfNeeded(); 
-        const resp = await fetchWithRetry(url); 
-        if (!resp.ok) break; 
-        const data = await resp.json(); 
-        const items = data._embedded?.items || data.items || []; 
-        for (const item of items) { 
-          if (item.type === 'file' && item.size) { 
-            totalSize += item.size; 
-            fileCount++; 
-          } else if (item.type === 'dir') folderCount++; 
-        } 
-        url = data._embedded?.next || data.next || null; 
-      } catch (e) { 
-        break; 
-      } 
-    }
-    return { totalSize, fileCount, folderCount };
+  el('progress').style.width = '100%';
+  updateStatus(`✅ Готово: ${success} сохранено`);
+  isRunning = false;
+  el('btn-start').disabled = false;
+  el('btn-stop').style.display = 'none';
+  
+  if (stats.errorFiles.length > 0 || stats.successFiles.length > 0 || stats.duplicateFiles.length > 0) {
+    const btn = document.createElement('button');
+    btn.textContent = '📋 Показать отчёт';
+    btn.style.marginTop = '10px';
+    btn.style.background = 'var(--success)';
+    btn.onclick = showReport;
+    el('step-links').appendChild(btn);
   }
   
-  function stopProcess() { 
-    isRunning = false; 
-    if (abortController) abortController.abort(); 
-    addLog('⏹ Остановка...'); 
-    updateStatus('⏹ Остановка...'); 
+  addLog(`🎉 Завершено: ${success} сохранено, ${skipped} дублей, ${errors} ошибок`);
+  showMessage(errors === 0 ? 'success' : 'error', `✅ ${success} сохранено, ${errors} ошибок`);
+}
+
+function stopProcess() {
+  isRunning = false;
+  if (abortController) abortController.abort();
+  addLog('⏹ Остановка...');
+  updateStatus('⏹ Остановка...');
+}
+
+function copyLog() {
+  if (!logs.length) { alert('📭 Лог пуст'); return; }
+  navigator.clipboard.writeText(logs.join('\n')).then(() => addLog('📋 Лог скопирован'));
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  el('target-preview').textContent = TARGET_FOLDER;
+  if (TOKEN) {
+    addLog('🔍 Токен найден');
+    verifyToken(TOKEN).catch(e => { addLog(`⚠️ Ошибка: ${e.message}`); updateStatus('Не авторизован'); });
+  } else {
+    addLog('⚠️ Требуется авторизация');
+    updateStatus('Не авторизован');
   }
+  el('copyLog').style.display = 'block';
+});
 </script>
 </body>
 </html>

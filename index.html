@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#fc3f1d">
-  <title>Yandex Saver v5.12</title>
+  <title>Yandex Saver v5.13</title>
   <style>
     :root{--bg:#f5f7fa;--card:#fff;--primary:#fc3f1d;--primary-hover:#e6300f;--text:#333;--text-light:#666;--border:#e0e0e0;--success:#4caf50;--error:#f44336;--warning:#ff9800;--info:#2196f3}
     *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
@@ -82,7 +82,7 @@
 <div class="container">
   <div class="header" onclick="location.reload()">
     <h1>🗂 Yandex Saver</h1>
-    <span class="badge">v5.12 🔒</span>
+    <span class="badge">v5.13 🔒</span>
   </div>
   <div class="refresh-hint">🔄 Нажмите на заголовок для обновления</div>
   <div class="hint">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</div>
@@ -352,7 +352,7 @@
   }
   function generateReportMarkdown(){
     const s=state.stats;const total=s.successCount+s.duplicateCount+s.errorCount;const rate=total>0?((s.successCount/total)*100).toFixed(1):'0.0';
-    let md=`# 📄 Отчёт Yandex Saver v5.12\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatBytes(s.totalFilesSize)})\n`;
+    let md=`# 📄 Отчёт Yandex Saver v5.13\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatBytes(s.totalFilesSize)})\n`;
     md+=`- Успешно: ${s.successCount} (${formatBytes(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatBytes(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatBytes(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
     if(s.errorFiles.length){md+=`## ❌ Ошибки (${s.errorCount})\n`;s.errorFiles.forEach((f,i)=>md+=`${i+1}. [${f.name}](${f.url}) | ${formatBytes(f.size)} | ${f.reason}\n`);md+=`\n`;}
     if(s.duplicateFiles.length){md+=`## 🔄 Дубликаты (${s.duplicateCount})\n`;s.duplicateFiles.forEach((f,i)=>md+=`${i+1}. [${f.name}](${f.url}) | ${formatBytes(f.size)}\n`);md+=`\n`;}
@@ -363,7 +363,7 @@
     const blob=new Blob([generateReportMarkdown()],{type:'text/markdown;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`YandexSaver_Report_${new Date().toISOString().slice(0,10)}.md`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);addLog('📥 Отчёт скачан');
   }
 
-  // ========== 🛠️ ВСПОМОГАТЕЛЬНЫЕ & API (ВОССТАНОВЛЕНО ИЗ 5.5) ==========
+  // ========== 🛠️ ВСПОМОГАТЕЛЬНЫЕ & API (ИСПРАВЛЕНО) ==========
   async function ensureFolderExists(path){const np=normalizePath(path);if(np==='/')return true;try{await fetch(`${API}/resources?path=${encodeURIComponent(np)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});}catch{const p=normalizePath(np.substring(0,np.lastIndexOf('/'))||'/');await ensureFolderExists(p);const cr=await fetch(`${API}/resources?path=${encodeURIComponent(np)}`,{method:'PUT',headers:{'Authorization':`OAuth ${TOKEN}`}});if(!cr.ok&&cr.status!==409)throw new Error(`Не создать ${np}`);addLog(`📁 Создана: ${np}`);}return true;}
   function getDirFromPublicPath(fp){if(!fp||fp==='/')return'';const parts=fp.split('/').filter(p=>p&&p.trim());return parts.length<=1?'':parts.slice(0,-1).join('/');}
   async function fileExistsAtPath(fp){try{const r=await fetch(`${API}/resources?path=${encodeURIComponent(fp)}`,{headers:{'Authorization':`OAuth ${TOKEN}`}});return r.status===200;}catch{return false;}}
@@ -371,14 +371,13 @@
   class RequestThrottler{constructor(m=3){this.m=m;this.t=[];}async waitIfNeeded(){const n=Date.now();this.t=this.t.filter(x=>n-x<1000);if(this.t.length>=this.m){const o=Math.min(...this.t);await new Promise(r=>setTimeout(r,Math.max(0,1000-(n-o)+333)));}this.t.push(Date.now());}}
   const throttler=new RequestThrottler(3);
 
-  // 🔥 КРИТИЧЕСКИ ВОССТАНОВЛЕНА КОДИРОВКА ПУТИ (safeUrl), иначе Яндекс отдаёт 404
+  // 🔥 УБРАН СЛОМАННЫЙ safeUrl REGEX. Возвращена стабильная логика v5.5
   async function fetchWithRetry(url, options, maxRetries = 5) {
     let lastError, lastResponse;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const safeUrl = url.replace(/\?path=([^&]+)/, (m, p) => `?path=${encodeURIComponent(decodeURIComponent(p))}`);
         await throttler.waitIfNeeded();
-        const response = await fetch(safeUrl, { ...options, signal: abortController?.signal });
+        const response = await fetch(url, { ...options, signal: abortController?.signal });
         lastResponse = response;
         if (response.ok || response.status === 202) return response;
         if (response.status === 404 && attempt < maxRetries) {
@@ -414,9 +413,20 @@
       return { skipped: true, reason: 'exists' };
     }
     updateStatus(`💾 ${fileName}`); addLog(`⬇️ Сохраняю: ${fileName}`);
+    
+    // 🔥 Явная задержка для стабильности save-to-disk
+    await new Promise(r => setTimeout(r, 300));
+    
     const params = new URLSearchParams({ public_key: publicKey, path: filePathInPublic, save_path: normalizePath(targetPath), name: fileName });
-    const response = await fetchWithRetry(`${API}/public/resources/save-to-disk?${params}`, { method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` } });
-    if (response.status === 202) { addLog(`⏳ В очереди: ${fileName}`); state.stats.successCount++; state.stats.successFiles.push({ name: fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 }); return { saved: true }; }
+    const url = `${API}/public/resources/save-to-disk?${params}`;
+    
+    const response = await fetchWithRetry(url, { method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` } });
+    if (response.status === 202) { 
+      addLog(`⏳ В очереди: ${fileName}`); 
+      state.stats.successCount++; 
+      state.stats.successFiles.push({ name: fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 }); 
+      return { saved: true }; 
+    }
     if (!response.ok) {
       const t = await response.text().catch(() => '');
       state.stats.errorCount++;

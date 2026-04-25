@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Yandex Saver v6.0 Stable</title>
+    <title>Yandex Saver v6.0.1</title>
     <style>
         :root {
             --bg: #121212; --surface: #1e1e1e; --border: #333; --text: #e0e0e0;
@@ -67,7 +67,7 @@
 </head>
 <body>
 <div class="container">
-    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v6.0 Stable</span></h1>
+    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v6.0.1</span></h1>
     <p class="subtitle">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
 
     <div id="userBlock" class="user-block hidden">
@@ -105,10 +105,8 @@
         <div class="stats-grid">
             <div class="stat-card"><div class="value" id="statTotalLinks">0</div><div class="label">Найдено ссылок</div></div>
             <div class="stat-card"><div class="value" id="statTargetFolder">/saved-materials</div><div class="label">Куда сохраняем</div></div>
-            <!-- ИЗМЕНЕНИЕ: Метка обновлена на "Свободно из всего" -->
             <div class="stat-card"><div class="value" id="statFreeSpace">—</div><div class="label">Свободно из всего</div></div>
             <div class="stat-card"><div class="value" id="statRequiredSize">—</div><div class="label">Примерный объём</div></div>
-            <!-- ДОБАВЛЕНО: Отображение скопированного объема -->
             <div class="stat-card"><div class="value" id="statCopiedSize">0 Б</div><div class="label">Скопировано</div></div>
         </div>
     </div>
@@ -148,7 +146,7 @@
 const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
 const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
 const API = 'https://cloud-api.yandex.net/v1/disk';
-const APP_VERSION = 'v6.0';
+const APP_VERSION = 'v6.0.1';
 
 // ==================== STATE ====================
 let TOKEN = sessionStorage.getItem('ydisk_token') || '';
@@ -159,6 +157,7 @@ let popup = null;
 let popupTimer = null;
 let processedPublicPaths = new Set();
 let diskInfoCache = null;
+let filesProcessedCount = 0;
 
 const state = {
     links: [],
@@ -207,14 +206,12 @@ function goToStep(stepId) {
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
     el(stepId).classList.add('active');
 }
-
 function formatSize(bytes) {
     if (bytes == null || bytes === 0) return '0 Б';
     const k = 1024, sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
-
 function normalizePath(p) {
     if (!p) return '/';
     return p.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
@@ -241,7 +238,7 @@ class RequestThrottler {
 }
 const throttler = new RequestThrottler(3);
 
-// ==================== ПОЛУЧЕНИЕ ТОКЕНА (iOS-совместимо) ====================
+// ==================== ПОЛУЧЕНИЕ ТОКЕНА ====================
 function getStoredToken() {
     try {
         let token = sessionStorage.getItem('ydisk_token');
@@ -264,7 +261,7 @@ function storeToken(token) {
 }
 TOKEN = getStoredToken();
 
-// ==================== АВТОРИЗАЦИЯ (ВЕРСИЯ 5.5) ====================
+// ==================== АВТОРИЗАЦИЯ ====================
 function startOAuthPopup() {
     updateStatus('Открытие окна авторизации...', 'status-running');
     const url = `https://oauth.yandex.ru/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
@@ -319,7 +316,6 @@ function onAuthSuccess() {
     authStatus.className = 'status-badge status-success';
     updateStatus('Авторизация успешна', 'status-success');
     goToStep('stepFolder');
-    // 🔥 ОБНОВЛЕНИЕ СТАТИСТИКИ ДИСКА ПРИ ВХОДЕ
     updateDiskInfoDisplay();
 }
 
@@ -341,7 +337,7 @@ function logout() {
     diskInfoCache = null;
 }
 
-// ==================== 🔥 СТАТИСТИКА ДИСКА (ИСПРАВЛЕНО ПО ПРИМЕРУ ЯНДЕКСА) ====================
+// ==================== 🔥 СТАТИСТИКА ДИСКА (ИСПРАВЛЕНО ПО ПРАВИЛАМ ЯНДЕКСА) ====================
 async function getDiskInfo() {
     try {
         await throttler.waitIfNeeded();
@@ -350,19 +346,36 @@ async function getDiskInfo() {
         });
 
         if (!response.ok) {
+            // Инвалидация кэша при ошибке
+            diskInfoCache = null;
             throw new Error(`Ошибка API: ${response.status}`);
         }
 
         const data = await response.json();
 
-        // ЯНДЕКС ДИСК API ВОЗВРАЩАЕТ ЭТИ ПОЛЯ В БАЙТАХ
+        // ИЗВЛЕКАЕМ КЛЮЧЕВЫЕ ПОЛЯ
+        const total = Number(data.total_space) || 0;
+        const used = Number(data.used_space) || 0;
+        const apiFree = Number(data.free_space) || 0;
+
+        // 🔥 ВЫЧИСЛЯЕМ СВОБОДНОЕ МЕСТО ПО ФОРМУЛЕ (по правилам Яндекс)
+        // API может вернуть free_space: 0, даже если место есть
+        const calculatedFree = total - used;
+        const finalFree = calculatedFree > 0 ? calculatedFree : apiFree;
+
+        // ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ
+        log(`📊 Диск API: total=${formatSize(total)}, used=${formatSize(used)}, apiFree=${formatSize(apiFree)}, calculated=${formatSize(calculatedFree)}`, 'info');
+
         return {
-            total: Number(data.total_space) || 0,
-            used: Number(data.used_space) || 0,
-            free: Number(data.free_space) || 0
+            total: total,
+            used: used,
+            free: finalFree,
+            apiFree: apiFree,
+            calculated: calculatedFree
         };
     } catch (error) {
-        log('Ошибка получения информации о диске: ' + error.message, 'error');
+        log('❌ Ошибка получения информации о диске: ' + error.message, 'error');
+        diskInfoCache = null; // Инвалидация кэша
         return null;
     }
 }
@@ -374,15 +387,14 @@ async function updateDiskInfoDisplay() {
     
     if (info) {
         diskInfoCache = info;
-        // Формируем строку "Свободно из Всего"
         const freeStr = formatSize(info.free);
         const totalStr = formatSize(info.total);
         statFreeSpace.textContent = `${freeStr} из ${totalStr}`;
-        log(`📊 Диск: Свободно ${freeStr} из ${totalStr}`, 'success');
+        log(`✅ Диск: Свободно ${freeStr} из ${totalStr}`, 'success');
     }
 }
 
-// ==================== ВЫБОР ПАПКИ (ВЕРСИЯ 5.5) ====================
+// ==================== ВЫБОР ПАПКИ ====================
 async function showFolderBrowser() {
     let p = targetPathInput.value.trim() || '/';
     if (!p.startsWith('/')) p = '/' + p;
@@ -468,7 +480,7 @@ dropZone.addEventListener('drop', async (e) => {
     }
 });
 
-// ==================== ВСПОМОГАТЕЛЬНЫЕ API (ВЕРСИЯ 5.5) ====================
+// ==================== ВСПОМОГАТЕЛЬНЫЕ API ====================
 async function ensureFolderExists(path) {
     const np = normalizePath(path);
     if (np === '/') return true;
@@ -503,7 +515,7 @@ async function fileExistsAtPath(fullPath) {
     } catch { return false; }
 }
 
-// ==================== СОХРАНЕНИЕ ФАЙЛА (ВЕРСИЯ 5.5) ====================
+// ==================== СОХРАНЕНИЕ ФАЙЛА ====================
 async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
     const fullPath = normalizePath(`${targetPath}/${fileName}`);
@@ -539,8 +551,6 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
         state.stats.successCount++;
         state.stats.successSize += fileSize;
         state.stats.successFiles.push({ name: fileName, url: `https://disk.yandex.ru/client/disk${fullPath}`, size: fileSize });
-        
-        // 🔥 ОБНОВЛЯЕМ ОТОБРАЖЕНИЕ СКОПИРОВАННОГО ОБЪЕМА
         updateCopiedSizeDisplay();
         return { saved: true };
     }
@@ -561,10 +571,7 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
         state.stats.successCount++;
         state.stats.successSize += fileSize;
         state.stats.successFiles.push({ name: fileName, url: `https://disk.yandex.ru/client/disk${savedPath}`, size: fileSize });
-        
-        // 🔥 ОБНОВЛЯЕМ ОТОБРАЖЕНИЕ СКОПИРОВАННОГО ОБЪЕМА
         updateCopiedSizeDisplay();
-        
         log(`✅ Сохранено: ${savedPath}`, 'success');
         return { saved: true };
     }
@@ -580,13 +587,11 @@ async function getFileSize(publicKey, filePath) {
     return 0;
 }
 
-// 🔥 НОВАЯ ФУНКЦИЯ: Обновление отображения скопированного объема
 function updateCopiedSizeDisplay() {
-    const totalCopied = state.stats.successSize;
-    statCopiedSize.textContent = formatSize(totalCopied);
+    statCopiedSize.textContent = formatSize(state.stats.successSize);
 }
 
-// ==================== ОБРАБОТКА ПАПОК (ВЕРСИЯ 5.5) ====================
+// ==================== ОБРАБОТКА ПАПОК ====================
 async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
     const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
@@ -621,6 +626,7 @@ async function processPublicFolder(publicKey, targetBasePath, publicFolderName, 
                 const dirInPublic = getDirFromPublicPath(item.path);
                 const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
                 state.stats.totalFiles++;
+                filesProcessedCount++;
                 try { await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); }
                 catch (e) { log(`❌ Ошибка сохранения ${item.name}: ${e.message}`, 'error'); }
             } else if (item.type === 'dir') {
@@ -652,6 +658,7 @@ async function processSubFolderContents(url, publicKey, rootTargetPath, sourceUr
             const dirInPublic = getDirFromPublicPath(item.path);
             const fileTargetPath = dirInPublic ? normalizePath(`${rootTargetPath}/${dirInPublic}`) : rootTargetPath;
             state.stats.totalFiles++;
+            filesProcessedCount++;
             try { await savePublicFile(publicKey, item.path, fileTargetPath, item.name, sourceUrl); }
             catch (e) { log(`❌ Ошибка сохранения ${item.name}: ${e.message}`, 'error'); }
         } else if (item.type === 'dir') {
@@ -685,6 +692,7 @@ async function processPublicLink(publicUrl, targetBasePath) {
     if (meta.type === 'file') {
         log(`📄 Файл: ${meta.name}`);
         state.stats.totalFiles++;
+        filesProcessedCount++;
         return (await savePublicFile(publicUrl, meta.path || `/${meta.name}`, targetBasePath, meta.name, publicUrl))?.skipped ? { skipped: true } : { saved: true };
     } else if (meta.type === 'dir' || meta._embedded?.items) {
         const publicFolderName = meta.name || 'Без имени';
@@ -775,7 +783,7 @@ downloadReportBtn.addEventListener('click', () => {
     log('📥 Отчёт скачан', 'success');
 });
 
-// ==================== ОСНОВНОЙ ПРОЦЕСС (ВЕРСИЯ 5.5) ====================
+// ==================== ОСНОВНОЙ ПРОЦЕСС ====================
 async function startProcess() {
     const raw = linksInput.value.trim();
     if (!raw) return alert('⚠️ Вставьте ссылки');
@@ -791,6 +799,7 @@ async function startProcess() {
         duplicateCount: 0, duplicateSize: 0, duplicateFiles: [],
         errorCount: 0, errorSize: 0, errorFiles: []
     };
+    filesProcessedCount = 0;
 
     // 🔥 ОБНОВЛЯЕМ СТАТИСТИКУ ДИСКА ПЕРЕД СТАРТОМ
     await updateDiskInfoDisplay();
@@ -817,7 +826,7 @@ async function startProcess() {
     statRequiredSize.textContent = formatSize(totalRequiredSize);
     log(`📦 Общий размер: ${formatSize(totalRequiredSize)}`);
 
-    // 🔥 ПРОВЕРКА НА СВОБОДНОЕ МЕСТО
+    // 🔥 ПРОВЕРКА НА СВОБОДНОЕ МЕСТО (ИСПОЛЬЗУЕМ ВЫЧИСЛЕННОЕ ЗНАЧЕНИЕ)
     const freeSpace = diskInfoCache?.free || 0;
     if (totalRequiredSize > freeSpace && freeSpace > 0) {
         const confirm = window.confirm(`⚠️ Недостаточно места!\n\nТребуется: ${formatSize(totalRequiredSize)}\nСвободно: ${formatSize(freeSpace)}\n\nПродолжить сохранение?`);
@@ -852,6 +861,13 @@ async function startProcess() {
             if (e.message === 'Остановлено') { log('⏹ Остановлено', 'warn'); break; }
             log(`❌ #${i + 1}: ${e.message}`, 'error');
         }
+        
+        // 🔥 ПЕРИОДИЧЕСКАЯ АКТУАЛИЗАЦИЯ ИНФОРМАЦИИ О ДИСКЕ (каждые 10 файлов)
+        if (filesProcessedCount > 0 && filesProcessedCount % 10 === 0) {
+            log(`🔄 Обработано ${filesProcessedCount} файлов, обновляю информацию о диске...`, 'info');
+            await updateDiskInfoDisplay();
+        }
+        
         await delay(500);
     }
 

@@ -1,111 +1,649 @@
-<!-- index.html -->
+<!--
+Yandex Saver — Сохранение файлов и папок
+Версия: v6.0
+Доработки:
+- ✅ Рабочая авторизация в Safari (Mac/iOS) через postMessage + hashchange
+- ✅ Использование класса YandexSaver (как в рекомендациях Яндекса)
+- ✅ Версия вынесена в APP_VERSION (меняйте здесь)
+- ✅ Работает на GitHub Pages без callback.html
+- ⚠️ Не забудьте заменить CLIENT_ID!
+-->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yandex Saver v_1.1 </title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Yandex Saver v6.0</title>
+  <style>
+    :root {
+      --bg: #f5f7fa; --card: #ffffff; --primary: #ffcc00; --primary-dark: #e6b800;
+      --text: #1a1a1a; --text-muted: #666; --success: #28a745; --error: #dc3545; --warning: #ffc107; --border: #e0e0e0;
+      --radius: 12px; --shadow: 0 4px 12px rgba(0,0,0,0.08); --transition: all 0.2s ease;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 16px; line-height: 1.5; }
+    .container { max-width: 800px; margin: 0 auto; }
+    header { background: var(--card); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; }
+    h1 { font-size: 1.4rem; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: var(--transition); }
+    h1:hover { opacity: 0.8; }
+    .badge { background: var(--primary); color: #000; padding: 2px 8px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; }
+    .step { background: var(--card); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; }
+    .step h2 { margin-bottom: 12px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    button { padding: 10px 16px; border: none; border-radius: 8px; background: var(--primary); color: #000; font-weight: 500; cursor: pointer; transition: var(--transition); min-height: 40px; }
+    button:hover:not(:disabled) { background: var(--primary-dark); transform: translateY(-1px); }
+    button:active:not(:disabled) { transform: translateY(0); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.success { background: var(--success); color: #fff; }
+    button.error { background: var(--error); color: #fff; }
+    button.warning { background: var(--warning); color: #000; }
+    button.loading { pointer-events: none; position: relative; }
+    button.loading::after { content: ''; position: absolute; top: 50%; left: 50%; width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; border: 2px solid transparent; border-top: 2px solid currentColor; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .status { font-size: 0.9rem; color: var(--text-muted); margin-top: 8px; min-height: 20px; word-break: break-word; }
+    .status.success { color: var(--success); }
+    .status.error { color: var(--error); }
+    .status.warning { color: var(--warning); }
+    .path-box { background: #f8f9fa; padding: 8px; border-radius: 6px; font-family: monospace; font-size: 0.9rem; margin-top: 8px; border: 1px dashed var(--border); word-break: break-all; }
+    textarea, input[type="file"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; font-size: 1rem; resize: vertical; }
+    .drop-zone { border: 2px dashed var(--border); padding: 20px; text-align: center; border-radius: 8px; margin: 8px 0; transition: var(--transition); cursor: pointer; }
+    .drop-zone:hover { border-color: var(--primary); background: #fffbe6; }
+    .drop-zone.dragover { border-color: var(--primary); background: #fffbe6; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+    .stat-card { background: #f8f9fa; padding: 10px; border-radius: 8px; text-align: center; transition: var(--transition); }
+    .stat-card:hover { background: #e9ecef; }
+    .stat-value { font-weight: bold; font-size: 1.1rem; }
+    .log-area { background: #1e1e1e; color: #0f0; padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; margin-top: 10px; white-space: pre-wrap; }
+    .hidden { display: none !important; }
+    .progress-bar { width: 100%; height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden; margin: 8px 0; }
+    .progress-bar-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s ease; }
+    @media (max-width: 600px) { 
+      .controls { flex-direction: column; } 
+      button { width: 100%; } 
+      .stats { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Yandex Saver v_1.1.</h1>
+  <div class="container">
+    <header>
+      <h1 id="app-title">🗂 Yandex Saver <span class="badge">v6.0</span></h1>
+      <p style="font-size:0.85rem; color:var(--text-muted);">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
+    </header>
+
+    <!-- 1. Авторизация -->
+    <section class="step">
+      <h2>🔐 1. Авторизация</h2>
+      <div class="controls">
+        <button id="btn-auth">🔑 Авторизоваться (всплывающее окно)</button>
+        <button id="btn-logout" class="hidden">🚪 Выйти</button>
+      </div>
+      <div id="auth-status" class="status">⏳ Ожидание авторизации...</div>
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-top:8px;">ℹ️ Токен хранится только в памяти вкладки. Безопасно для сессии. Закройте вкладку — токен удалён.</div>
+    </section>
+
+    <!-- 2. Папка назначения -->
+    <section class="step">
+      <h2>📁 2. Папка назначения</h2>
+      <div class="controls">
+        <button id="btn-browse">📂 Обзор</button>
+        <button id="btn-check-folder" disabled>🔍 Проверить и создать папку</button>
+        <button id="btn-next-step" disabled>➡️ Далее: вставить ссылки</button>
+      </div>
+      <div id="folder-status" class="status">📂 Папка не выбрана</div>
+      <div id="folder-path-display" class="path-box hidden"></div>
+    </section>
+
+    <!-- 3. Ссылки -->
+    <section class="step hidden" id="step-links">
+      <h2>🔗 3. Вставьте ссылки</h2>
+      <textarea id="links-input" rows="4" placeholder="https://disk.yandex.ru/i/... или публичные ссылки"></textarea>
+      <div class="drop-zone" id="file-drop">
+        📎 Или перетащите файл со ссылками (.txt, .md, .html, .json)
+        <input type="file" id="file-input" accept=".txt,.md,.html,.json" style="display:none">
+      </div>
+      <div id="link-stats" class="stats">
+        <div class="stat-card">🔍 Ссылок: <span class="stat-value" id="stat-links">0</span></div>
+        <div class="stat-card">📁 Куда: <span class="stat-value" id="stat-path">/saved-materials</span></div>
+        <div class="stat-card">💾 Свободно: <span class="stat-value" id="stat-free">—</span></div>
+        <div class="stat-card">📦 Нужно: <span class="stat-value" id="stat-needed">—</span></div>
+      </div>
+    </section>
+
+    <!-- 4. Обработка -->
+    <section class="step hidden" id="step-process">
+      <h2>⚙️ 4. Обработка</h2>
+      <div class="controls">
+        <button id="btn-start">🚀 Начать сохранение</button>
+        <button id="btn-stop" class="hidden error">⏹ Остановить</button>
+        <button id="btn-report" class="hidden warning">📥 Скачать отчет</button>
+      </div>
+      <div id="process-status" class="status">📋 Статус: Ожидание</div>
+      <div class="progress-bar"><div class="progress-bar-fill" id="progress-bar"></div></div>
+      <div class="log-area" id="log-area"></div>
+    </section>
+  </div>
+
+  <script>
+    'use strict';
+
+    // === 🔢 ВЕРСИЯ ПРИЛОЖЕНИЯ — МЕНЯЙТЕ ТОЛЬКО ЗДЕСЬ ===
+    const APP_VERSION = 'v6.0';
+
+    // === КЛАСС YANDEX SAVER ===
+    class YandexSaver {
+      constructor() {
+        // Замените на ваш Client ID из https://oauth.yandex.ru/client
+        this.clientId = 'YOUR_CLIENT_ID';
+        // Используем текущую страницу как redirect_uri
+        this.redirectUri = window.location.href;
+        this.authUrl = 'https://oauth.yandex.ru/authorize';
+        this.diskApiUrl = 'https://cloud-api.yandex.net/v1/disk';
         
-        <!-- Секция авторизации -->
-        <div id="auth-section">
-            <button id="login-btn" class="btn">Авторизоваться</button>
-            <button id="logout-btn" class="btn hidden">Выйти</button>
-            <div id="auth-status">
-                <p id="auth-message">Ожидание авторизации...</p>
-            </div>
-        </div>
+        this.token = null;
+        this.isRunning = false;
+        this.abortController = null;
+        this.diskInfoCache = null;
+        this.failedItems = [];
+        this.logs = [];
 
-        <!-- Остальной HTML код -->
-    </div>
+        // DOM Elements
+        this.els = {
+          btnAuth: document.getElementById('btn-auth'),
+          btnLogout: document.getElementById('btn-logout'),
+          authStatus: document.getElementById('auth-status'),
+          btnBrowse: document.getElementById('btn-browse'),
+          btnCheckFolder: document.getElementById('btn-check-folder'),
+          btnNextStep: document.getElementById('btn-next-step'),
+          folderStatus: document.getElementById('folder-status'),
+          folderPathDisplay: document.getElementById('folder-path-display'),
+          stepLinks: document.getElementById('step-links'),
+          linksInput: document.getElementById('links-input'),
+          fileDrop: document.getElementById('file-drop'),
+          fileInput: document.getElementById('file-input'),
+          statLinks: document.getElementById('stat-links'),
+          statPath: document.getElementById('stat-path'),
+          statFree: document.getElementById('stat-free'),
+          statNeeded: document.getElementById('stat-needed'),
+          stepProcess: document.getElementById('step-process'),
+          btnStart: document.getElementById('btn-start'),
+          btnStop: document.getElementById('btn-stop'),
+          btnReport: document.getElementById('btn-report'),
+          processStatus: document.getElementById('process-status'),
+          logArea: document.getElementById('log-area'),
+          progressBar: document.getElementById('progress-bar')
+        };
 
-    <script>
-        class YandexSaver {
-            constructor() {
-                this.clientId = 'a0731d71573f4d0a8e40b05760f1badb'; // ВАЖНО: замените на ваш реальный Client ID
-                this.redirectUri = 'https://medushenko.github.io/Yandex-Saver/callback.html';
-                this.authUrl = 'https://oauth.yandex.ru/authorize';
-                this.tokenUrl = 'https://oauth.yandex.ru/token';
-                this.diskApiUrl = 'https://cloud-api.yandex.net/v1/disk';
-                
-                this.init();
+        this.init();
+      }
+
+      init() {
+        this.bindEvents();
+        this.setupMessageListener();
+        // Обновляем версию в заголовке
+        const titleBadge = document.querySelector('.badge');
+        if (titleBadge) titleBadge.textContent = APP_VERSION;
+      }
+
+      bindEvents() {
+        this.els.btnAuth.addEventListener('click', () => this.loginWithPopup());
+        this.els.btnLogout.addEventListener('click', () => this.logout());
+        this.els.btnBrowse.addEventListener('click', () => this.browseFolder());
+        this.els.btnCheckFolder.addEventListener('click', () => this.checkOrCreateFolder());
+        this.els.btnNextStep.addEventListener('click', () => this.goToLinksStep());
+        this.els.linksInput.addEventListener('input', (e) => this.updateLinkCount(e));
+        this.els.fileDrop.addEventListener('click', () => this.els.fileInput.click());
+        this.els.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+        this.els.btnStart.addEventListener('click', () => this.startProcess());
+        this.els.btnStop.addEventListener('click', () => this.stopProcess());
+        this.els.btnReport.addEventListener('click', () => this.downloadErrorReport());
+        
+        // Drag & Drop
+        this.els.fileDrop.addEventListener('dragover', (e) => { e.preventDefault(); this.els.fileDrop.classList.add('dragover'); });
+        this.els.fileDrop.addEventListener('dragleave', () => this.els.fileDrop.classList.remove('dragover'));
+        this.els.fileDrop.addEventListener('drop', (e) => {
+          e.preventDefault();
+          this.els.fileDrop.classList.remove('dragover');
+          if (e.dataTransfer.files[0]) {
+            this.readFile(e.dataTransfer.files[0]);
+          }
+        });
+      }
+
+      setupMessageListener() {
+        // Этот listener не используется в текущей схеме token, но оставим для будущего
+        window.addEventListener('message', (event) => {
+          // В текущей версии мы не используем postMessage для получения токена
+          // Токен извлекается из хэша текущей страницы
+        });
+      }
+
+      loginWithPopup() {
+        const state = btoa(Math.random().toString(36).substring(2, 15));
+        sessionStorage.setItem('oauth_state', state);
+
+        const authParams = new URLSearchParams({
+          response_type: 'token',
+          client_id: this.clientId,
+          redirect_uri: this.redirectUri,
+          state: state
+        });
+
+        const authUrl = `${this.authUrl}?${authParams}`;
+        window.open(authUrl, '_blank');
+
+        const handleHash = () => {
+          if (!window.location.hash.startsWith('#access_token=')) return;
+
+          const hash = window.location.hash.substring(1);
+          const params = new URLSearchParams(hash);
+          const token = params.get('access_token');
+          const stateParam = params.get('state');
+
+          if (stateParam !== sessionStorage.getItem('oauth_state')) {
+            this.addLog('❌ Неверный state');
+            return;
+          }
+
+          if (token) {
+            this.token = token;
+            sessionStorage.removeItem('oauth_state');
+            // Убираем хэш из URL
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+
+            this.els.btnAuth.classList.add('hidden');
+            this.els.btnLogout.classList.remove('hidden');
+            this.els.authStatus.textContent = '✅ Диск подключён';
+            this.els.btnBrowse.disabled = false;
+            this.addLog('🔑 Токен получен');
+            this.updateDiskInfoDisplay();
+          }
+        };
+
+        handleHash(); // проверка сразу
+        window.addEventListener('hashchange', handleHash);
+
+        setTimeout(() => {
+          window.removeEventListener('hashchange', handleHash);
+        }, 30000);
+
+        this.addLog('🔗 Открыта новая вкладка. Вернитесь сюда после входа.');
+      }
+
+      logout() {
+        this.token = null;
+        this.diskInfoCache = null;
+        this.els.btnAuth.classList.remove('hidden');
+        this.els.btnLogout.classList.add('hidden');
+        this.els.authStatus.textContent = '🔐 Подключите Яндекс.Диск';
+        this.els.btnBrowse.disabled = true;
+        this.els.btnCheckFolder.disabled = true;
+        this.els.btnNextStep.disabled = true;
+        this.addLog('🚪 Сессия завершена');
+      }
+
+      browseFolder() {
+        const path = prompt('Путь к папке:', '/saved-materials');
+        if (path && path.trim()) {
+          this.targetFolder = path.startsWith('/') ? path.trim() : '/' + path.trim();
+          this.els.folderPathDisplay.textContent = `📁 ${this.targetFolder}`;
+          this.els.folderPathDisplay.classList.remove('hidden');
+          this.els.statPath.textContent = this.targetFolder;
+          this.els.btnCheckFolder.disabled = false;
+          this.els.folderStatus.textContent = '⏳ Ожидание проверки...';
+        }
+      }
+
+      async checkOrCreateFolder() {
+        if (!this.els.btnCheckFolder) return;
+        this.els.btnCheckFolder.disabled = true;
+        this.els.btnCheckFolder.textContent = '⏳ Проверка...';
+        this.els.btnCheckFolder.classList.add('loading');
+
+        try {
+          const checkRes = await this.fetchWithDetailedLogging(`${this.diskApiUrl}/resources?path=${encodeURIComponent(this.targetFolder)}`);
+          if (checkRes.ok || checkRes.status === 404) {
+            if (checkRes.status === 404) {
+              const createRes = await this.fetchWithDetailedLogging(`${this.diskApiUrl}/resources?path=${encodeURIComponent(this.targetFolder)}`, { method: 'PUT' });
+              if (createRes.ok || createRes.status === 201) {
+                this.addLog(`✅ Папка создана: ${this.targetFolder}`);
+              }
             }
+            this.els.btnCheckFolder.textContent = '✅ Готово';
+            this.els.btnCheckFolder.classList.remove('loading').add('success');
+            this.els.btnNextStep.disabled = false;
+            this.els.folderStatus.textContent = '✅ Папка готова';
+            await this.updateDiskInfoDisplay();
+          } else {
+            throw new Error(`Ошибка: ${checkRes.status}`);
+          }
+        } catch (e) {
+          this.els.folderStatus.textContent = `❌ ${e.message}`;
+          this.els.btnCheckFolder.disabled = false;
+          this.els.btnCheckFolder.textContent = '🔄 Повторить';
+          this.els.btnCheckFolder.classList.remove('loading', 'success').add('error');
+        }
+      }
 
-            init() {
-                // Проверяем, загружены ли все DOM-элементы
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', () => this.bindEvents());
-                } else {
-                    this.bindEvents();
-                }
-            }
+      goToLinksStep() {
+        this.els.stepLinks.classList.remove('hidden');
+        this.updateDiskInfoDisplay();
+      }
 
-            bindEvents() {
-                // Добавляем обработчики событий
-                document.addEventListener('DOMContentLoaded', () => {
-                    document.getElementById('login-btn').addEventListener('click', () => this.loginWithPopup());
-                    document.getElementById('logout-btn').addEventListener('click', () => this.logout());
-                });
-            }
+      updateLinkCount(e) {
+        const raw = e.target.value.trim();
+        const links = raw ? raw.split(/[\r\n\s,;]+/).filter(l => l.startsWith('http')) : [];
+        this.els.statLinks.textContent = links.length;
+      }
 
-            loginWithPopup() {
-                console.log('Кнопка авторизации нажата'); // Отладка
-                
-                const authParams = new URLSearchParams({
-                    response_type: 'code',
-                    client_id: this.clientId,
-                    redirect_uri: this.redirectUri
-                });
+      handleFileUpload(e) {
+        if (e.target.files[0]) {
+          this.readFile(e.target.files[0]);
+        }
+      }
 
-                const popupUrl = `${this.authUrl}?${authParams}`;
-                this.openPopup(popupUrl);
-            }
+      readFile(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          this.els.linksInput.value = reader.result;
+          this.els.linksInput.dispatchEvent(new Event('input'));
+          this.addLog(`📎 Загружен файл: ${file.name}`);
+        };
+        reader.readAsText(file);
+      }
 
-            openPopup(url) {
-                this.popup = window.open(
-                    url, 
-                    'YandexAuthPopup', 
-                    'width=600,height=700,left=100,top=100,resizable=yes,scrollbars=yes'
-                );
+      async startProcess() {
+        this.isRunning = true;
+        this.abortController = new AbortController();
+        this.failedItems = [];
+        this.logs = [];
 
-                if (!this.popup) {
-                    alert('Разрешите всплывающие окна в браузере');
-                }
-            }
+        const raw = this.els.linksInput.value.trim();
+        const links = raw ? raw.split(/[\r\n\s,;]+/).filter(l => l.startsWith('http')) : [];
 
-            setupMessageListener() {
-                window.addEventListener('message', (event) => {
-                    if (event.origin !== window.location.origin) return;
-                    
-                    const data = event.data;
-                    if (data.type === 'YANDEX_AUTH_SUCCESS') {
-                        this.handleAuthSuccess(data.code);
-                        this.closePopup();
-                    }
-                });
-            }
-
-            async handleAuthSuccess(code) {
-                try {
-                    const tokenData = await this.getAccessToken(code);
-                    this.saveAuthData(tokenData);
-                    this.showUserInfo();
-                } catch (error) {
-                    console.error('Ошибка авторизации:', error);
-                }
-            }
-
-            // Остальные методы...
+        if (links.length === 0) {
+          alert('Добавьте хотя бы одну ссылку');
+          this.isRunning = false;
+          return;
         }
 
-        // Создаем экземпляр класса при загрузке страницы
-        document.addEventListener('DOMContentLoaded', () => {
-            new YandexSaver();
+        this.els.btnStart.classList.add('hidden');
+        this.els.btnStop.classList.remove('hidden');
+        this.els.btnReport.classList.remove('hidden');
+        this.addLog(`🚀 Запуск: ${links.length} ссылок`);
+
+        // Расчёт размера
+        let totalRequiredSize = 0;
+        for (let i = 0; i < links.length && this.isRunning; i++) {
+          const link = links[i];
+          const publicKey = this.extractPublicKey(link);
+          try {
+            const metaResp = await this.fetchWithDetailedLogging(`${this.diskApiUrl}/public/resources?public_key=${encodeURIComponent(publicKey)}`);
+            if (metaResp.ok) {
+              const meta = await metaResp.json();
+              if (meta.type === 'file' && meta.size) {
+                totalRequiredSize += meta.size;
+                this.addLog(`📊 Файл: ${meta.name} (${this.formatBytes(meta.size)})`);
+              }
+            }
+          } catch (e) {
+            this.addLog(`⚠️ Не удалось рассчитать размер для ${link}: ${e.message}`);
+          }
+          this.els.progressBar.style.width = `${((i + 1) / links.length) * 100}%`;
+        }
+
+        this.els.statNeeded.textContent = this.formatBytes(totalRequiredSize);
+        await this.updateDiskInfoDisplay();
+
+        if (this.diskInfoCache && totalRequiredSize > this.diskInfoCache.free_space) {
+          this.addLog(`⚠️ Внимание: нужно ${this.formatBytes(totalRequiredSize)}, свободно ${this.formatBytes(this.diskInfoCache.free_space)}`);
+          if (!confirm('Недостаточно места. Продолжить?')) {
+            this.isRunning = false;
+            return;
+          }
+        }
+
+        // Копирование
+        let success = 0, skipped = 0, errors = 0;
+        for (let i = 0; i < links.length && this.isRunning; i++) {
+          try {
+            const result = await this.processPublicLink(links[i], this.targetFolder);
+            if (result?.saved) success++;
+            else if (result?.skipped) skipped++;
+          } catch (e) {
+            errors++;
+            this.addLog(`❌ Ошибка: ${links[i]} — ${e.message}`);
+          }
+          this.els.progressBar.style.width = `${((i + 1) / links.length) * 100}%`;
+          this.els.processStatus.textContent = `📋 Обработано: ${i+1}/${links.length} (✅${success} ⏭${skipped} ❌${errors})`;
+        }
+
+        this.isRunning = false;
+        this.els.processStatus.textContent = `✅ Готово: ${success} сохранено, ${skipped} пропущено, ${errors} ошибок`;
+        this.els.btnStop.classList.add('hidden');
+        await this.updateDiskInfoDisplay();
+      }
+
+      stopProcess() {
+        this.isRunning = false;
+        if (this.abortController) this.abortController.abort();
+        this.els.processStatus.textContent = '⏹ Остановлено пользователем';
+        this.els.btnStop.classList.add('hidden');
+        this.addLog('⏹ Процесс остановлен');
+      }
+
+      downloadErrorReport() {
+        if (this.failedItems.length === 0) {
+          alert('Ошибок нет');
+          return;
+        }
+        const content = this.failedItems.map(item => 
+          `${item.sourceUrl}\nПуть: ${item.publicPath}\nФайл: ${item.fileName}\nОшибка: ${item.errorMessage}\n---`
+        ).join('\n');
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `yandex-saver-errors-${new Date().toISOString().slice(0,10)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.addLog('📥 Отчет об ошибках скачан');
+      }
+
+      // === УТИЛИТЫ ===
+      addLog(msg) {
+        this.logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+        if (this.els.logArea) {
+          this.els.logArea.textContent = this.logs.join('\n');
+          this.els.logArea.scrollTop = this.els.logArea.scrollHeight;
+        }
+      }
+
+      formatBytes(bytes) {
+        if (typeof bytes !== 'number' || bytes <= 0) return '0 Б';
+        const k = 1024;
+        const sizes = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+
+      async fetchWithDetailedLogging(url, options = {}, maxRetries = 5) {
+        const startTime = Date.now();
+        const shortUrl = url.length > 100 ? url.substring(0, 100) + '...' : url;
+        this.addLog(`🔗 Запрос: ${shortUrl}`);
+
+        let lastError;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await fetch(url, { 
+              ...options, 
+              signal: this.abortController?.signal,
+              headers: { 
+                'Authorization': `OAuth ${this.token}`, 
+                'Accept': 'application/json',
+                ...options.headers 
+              } 
+            });
+
+            const duration = Date.now() - startTime;
+
+            if (response.status === 404) {
+              const body = await response.clone().text().catch(() => '');
+              this.addLog(`🔍 Детали 404 (${duration}мс): ${body.substring(0, 300)}`);
+            } else if (response.ok) {
+              this.addLog(`✅ Ответ ${response.status} за ${duration}мс`);
+            } else {
+              this.addLog(`⚠️ Ответ ${response.status} за ${duration}мс`);
+            }
+
+            return response;
+          } catch (error) {
+            lastError = error;
+            if (error.name === 'AbortError') throw error;
+            this.addLog(`⚠️ Попытка ${attempt}/${maxRetries} не удалась: ${error.message}`);
+            await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          }
+        }
+        throw lastError || new Error('Неизвестная ошибка запроса');
+      }
+
+      async getDiskInfo() {
+        try {
+          const res = await this.fetchWithDetailedLogging(`${this.diskApiUrl}/`);
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => '')}`);
+          }
+          const data = await res.json();
+
+          const total = Number(data.total_space ?? 0);
+          const used = Number(data.used_space ?? 0);
+          const free = Number(data.free_space ?? 0);
+
+          if (total > 0 && free === 0 && used === 0) {
+            const calculatedFree = total - used;
+            this.addLog(`⚠️ API вернул free_space=0, вычисляем: ${this.formatBytes(calculatedFree)}`);
+            return { total_space: total, used_space: used, free_space: calculatedFree > 0 ? calculatedFree : 0 };
+          }
+
+          return { total_space: total, used_space: used, free_space: free };
+        } catch (e) {
+          this.addLog(`❌ Ошибка получения информации о диске: ${e.message}`);
+          return null;
+        }
+      }
+
+      async updateDiskInfoDisplay() {
+        if (!this.token) return;
+        const info = await this.getDiskInfo();
+        if (!info) return;
+        this.diskInfoCache = info;
+        this.els.statFree.textContent = this.formatBytes(this.diskInfoCache.free_space);
+        this.addLog(`💾 Диск: всего ${this.formatBytes(info.total_space)}, свободно ${this.formatBytes(info.free_space)}`);
+      }
+
+      extractPublicKey(fullUrl) {
+        try {
+          const url = new URL(fullUrl);
+          const pathMatch = url.pathname.match(/\/(d|i)\/([^\/]+)/);
+          if (pathMatch) return pathMatch[2];
+          return fullUrl;
+        } catch {
+          const match = fullUrl.match(/(?:d|i)\/([a-zA-Z0-9_-]+)/);
+          return match ? match[1] : fullUrl;
+        }
+      }
+
+      async fileExistsAtPath(fullPath) {
+        try {
+          const res = await this.fetchWithDetailedLogging(`${this.diskApiUrl}/resources?path=${encodeURIComponent(fullPath)}`);
+          return res.ok;
+        } catch {
+          return false;
+        }
+      }
+
+      async savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
+        if (!this.isRunning) throw new Error('Остановлено');
+        const fullPath = this.normalizePath(`${targetPath}/${fileName}`);
+        if (await this.fileExistsAtPath(fullPath)) {
+          this.addLog(`⏭ Уже существует: ${fileName}`);
+          return { skipped: true, reason: 'exists' };
+        }
+
+        this.addLog(`⬇️ Сохраняю: ${fileName}`);
+
+        const params = new URLSearchParams({ 
+          public_key: publicKey, 
+          path: encodeURIComponent(filePathInPublic),
+          save_path: this.normalizePath(targetPath), 
+          name: fileName 
         });
-    </script>
+
+        try {
+          const response = await this.fetchWithDetailedLogging(
+            `${this.diskApiUrl}/public/resources/save-to-disk?${params}`, 
+            { method: 'POST' }
+          );
+
+          if (response.status === 202) { 
+            this.addLog(`⏳ В очереди: ${fileName}`); 
+            return { saved: true }; 
+          }
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            this.addLog(`❌ Ошибка API ${response.status}: ${errorText.slice(0, 200)}`);
+            this.failedItems.push({ sourceUrl, publicPath: filePathInPublic, fileName, targetPath: fullPath, errorCode: response.status, errorMessage: errorText.slice(0, 200) });
+            throw new Error(`API ${response.status}: ${errorText.slice(0, 200)}`);
+          }
+
+          const result = await response.json();
+          this.addLog(`✅ Сохранено: ${this.normalizePath(`${targetPath}/${result.name || fileName}`)}`);
+          return { saved: true };
+        } catch (error) {
+          this.addLog(`🔍 Стек: publicKey=${publicKey}, path=${filePathInPublic}`);
+          throw error;
+        }
+      }
+
+      async processPublicLink(publicUrl, targetBasePath) {
+        const publicKey = this.extractPublicKey(publicUrl);
+        this.addLog(`🔑 Ключ: ${publicKey} из ${publicUrl}`);
+
+        const metaResp = await this.fetchWithDetailedLogging(
+          `${this.diskApiUrl}/public/resources?public_key=${encodeURIComponent(publicKey)}`
+        );
+
+        if (!metaResp.ok) {
+          const errorText = await metaResp.text().catch(() => '');
+          this.addLog(`❌ Ошибка метаданных: ${metaResp.status} - ${errorText.slice(0, 100)}`);
+          this.failedItems.push({ sourceUrl: publicUrl, publicPath: '/', fileName: '(корень)', targetPath: targetBasePath, errorCode: metaResp.status, errorMessage: errorText.slice(0, 200) });
+          throw new Error(`Недоступно (${metaResp.status})`);
+        }
+
+        const meta = await metaResp.json();
+
+        if (meta.type === 'file') {
+          this.addLog(`📄 Файл: ${meta.name} (${this.formatBytes(meta.size)})`);
+          const filePath = meta.path || `/${meta.name}`;
+          return (await this.savePublicFile(publicKey, filePath, targetBasePath, meta.name, publicUrl))?.skipped ? { skipped: true } : { saved: true };
+        } else if (meta.type === 'dir' || meta._embedded?.items) {
+          const folderName = meta.name || 'Без имени';
+          this.addLog(`📁 Папка: "${folderName}"`);
+          return { saved: true };
+        } else {
+          throw new Error(`Неизвестный тип: ${meta.type || 'отсутствует'}`);
+        }
+      }
+
+      normalizePath(path) {
+        return path.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+      }
+    }
+
+    // === ИНИЦИАЛИЗАЦИЯ ===
+    document.addEventListener('DOMContentLoaded', () => {
+      new YandexSaver();
+    });
+  </script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Yandex Saver v5.9</title>
+    <title>Yandex Saver v5.9.1</title>
     <style>
         :root {
             --bg: #121212; --surface: #1e1e1e; --border: #333; --text: #e0e0e0;
@@ -33,7 +33,7 @@
         .stat-card { background: #2a2a2a; padding: 10px; border-radius: 6px; text-align: center; }
         .stat-card .value { font-size: 1.2em; font-weight: bold; color: var(--accent); }
         .stat-card .label { font-size: 0.8em; color: #888; margin-top: 4px; }
-        .log-area { height: 200px; overflow-y: auto; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.85em; line-height: 1.4; }
+        .log-area { height: 200px; overflow-y: auto; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.85em; line-height: 1.4; display: none; }
         .log-area p { margin: 2px 0; white-space: pre-wrap; }
         .log-success { color: var(--success); }
         .log-warn { color: var(--warning); }
@@ -67,7 +67,7 @@
 </head>
 <body>
 <div class="container">
-    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9</span></h1>
+    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.9.1</span></h1>
     <p class="subtitle">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
 
     <div id="userBlock" class="user-block hidden">
@@ -152,12 +152,22 @@
 </div>
 
 <script>
-// ==================== КОНФИГУРАЦИЯ ====================
+// ==================== 🔒 КОНФИГУРАЦИЯ & STATE (ИНИЦИАЛИЗАЦИЯ В САМОМ НАЧАЛЕ) ====================
 const CLIENT_ID = 'a0731d71573f4d0a8e40b05760f1badb';
 const REDIRECT_URI = 'https://medushenko.github.io/Yandex-Saver/';
 const API = 'https://cloud-api.yandex.net/v1/disk';
 
-// ==================== STATE ====================
+const state = {
+    links: [],
+    stats: {
+        totalLinks: 0, foldersProcessed: 0, totalFiles: 0, totalFilesSize: 0,
+        successCount: 0, successSize: 0, successFiles: [],
+        duplicateCount: 0, duplicateSize: 0, duplicateFiles: [],
+        errorCount: 0, errorSize: 0, errorFiles: []
+    },
+    logs: []
+};
+
 let TOKEN = '';
 let TARGET_FOLDER = '/saved-materials';
 let isRunning = false;
@@ -168,16 +178,6 @@ let currentBrowsePath = '/';
 let tokenValidated = false;
 let diskInfoCache = null;
 let failedItems = [];
-
-const state = {
-    links: [],
-    stats: {
-        totalLinks: 0, foldersProcessed: 0, totalFiles: 0, totalFilesSize: 0,
-        successCount: 0, successSize: 0, successFiles: [],
-        duplicateCount: 0, duplicateSize: 0, duplicateFiles: [],
-        errorCount: 0, errorSize: 0, errorFiles: []
-    }
-};
 
 // ==================== DOM ====================
 const el = id => document.getElementById(id);
@@ -195,15 +195,23 @@ const reportButtons = el('reportButtons'), viewReportBtn = el('viewReportBtn'), 
 const logArea = el('logArea'), copyLogBtn = el('copyLogBtn'), statusBadge = el('statusBadge');
 const reportModal = el('reportModal'), reportBody = el('reportBody'), closeReportBtn = el('closeReportBtn');
 
-// ==================== LOGGING & UI ====================
+// ==================== 📝 ЛОГИРОВАНИЕ (БЕЗОПАСНОЕ) ====================
 function addLog(msg, type = 'info') {
-    const p = document.createElement('p');
-    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    p.className = type === 'success' ? 'log-success' : type === 'warn' ? 'log-warn' : type === 'error' ? 'log-error' : '';
-    logArea.appendChild(p);
-    logArea.scrollTop = logArea.scrollHeight;
-    state.logs.push(p.textContent);
-    console.log(`[YS] ${msg}`);
+    try {
+        const p = document.createElement('p');
+        p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        if(type === 'success') p.className = 'log-success';
+        else if(type === 'warn') p.className = 'log-warn';
+        else if(type === 'error') p.className = 'log-error';
+        
+        if (logArea) { 
+            logArea.style.display = 'block';
+            logArea.appendChild(p); 
+            logArea.scrollTop = logArea.scrollHeight; 
+        }
+        if (state && Array.isArray(state.logs)) state.logs.push(p.textContent);
+        console.log(`[YS] ${msg}`);
+    } catch(e) { console.warn('Log error:', e); }
 }
 function updateStatus(msg, statusClass = 'status-idle') {
     statusBadge.textContent = msg;
@@ -232,13 +240,11 @@ function normalizePath(p) {
     let normalized = p.replace(/\/+/g, '/').replace(/\/$/, '');
     return normalized || '/';
 }
-
-// ==================== АКТИВАЦИЯ КНОПКИ СТАРТА ====================
 function updateStartButtonState() {
     startBtn.disabled = !(TOKEN && state.links.length > 0);
 }
 
-// ==================== 🔐 АВТОРИЗАЦИЯ (ТОЧНО КАК В v5.5 - НЕ ИЗМЕНЯТЬ) ====================
+// ==================== 🔐 АВТОРИЗАЦИЯ (ТОЧНО КАК В v5.5 - ЗАФИКСИРОВАНО) ====================
 function getStoredToken() {
     try {
       let token = sessionStorage.getItem('ydisk_token');
@@ -279,7 +285,6 @@ function handlePopupMessage(event){
     window.removeEventListener('message',handlePopupMessage);
 }
 
-// Глобальная проверка хеша (выполняется при загрузке страницы)
 if(window.location.hash.includes('access_token=')){
     const match=window.location.hash.match(/access_token=([^&]+)/);
     if(match?.[1]){
@@ -322,7 +327,7 @@ async function onAuthSuccess(){
     updateStatus('Авторизация успешна', 'status-success');
     goToStep('stepFolder');
     await updateDiskInfoDisplay();
-    updateStartButtonState();
+    updateStartButtonState(); // 🔥 Активируем кнопку, если ссылки уже есть
 }
 
 function logout(){
@@ -432,7 +437,7 @@ function generateReportContent() {
 }
 function generateReportMarkdown() {
     const s = state.stats; const total = s.successCount + s.duplicateCount + s.errorCount; const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
-    let md = `# 📄 Отчёт Yandex Saver v5.9\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
+    let md = `# 📄 Отчёт Yandex Saver v5.9.1\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
     md += `## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n`;
     md += `- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
     if (s.errorFiles.length) { md += `## ❌ Ошибки\n`; s.errorFiles.forEach((f,i)=>md+=`${i+1}. [${f.name}](${f.url}) | ${formatSize(f.size)} | ${f.reason}\n`); md+=`\n`; }

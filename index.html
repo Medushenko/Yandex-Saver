@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Yandex Saver v5.8</title>
+    <title>Yandex Saver v5.8.1</title>
     <style>
         :root {
             --bg: #121212; --surface: #1e1e1e; --border: #333; --text: #e0e0e0;
@@ -40,15 +40,12 @@
         .log-error { color: var(--error); }
         .folder-path { display: flex; align-items: center; gap: 8px; background: #2a2a2a; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
         .folder-path input { flex: 1; background: transparent; border: none; padding: 0; font-size: 0.95em; }
-        
-        /* 🔥 УЛУЧШЕННЫЙ БРАУЗЕР ПАПОК */
         .folder-browser-wrapper { position: relative; background: #2a2a2a; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
         .folder-browser { max-height: 250px; overflow-y: auto; padding: 8px; }
-        .folder-actions-bar { position: sticky; bottom: 0; background: #252525; border-top: 1px solid var(--border); padding: 10px; display: flex; gap: 10px; border-radius: 0 0 6px 6px; }
+        .folder-actions-bar { position: sticky; bottom: 0; background: #252525; border-top: 1px solid var(--border); padding: 10px; display: flex; gap: 10px; border-radius: 0 0 6px 6px; z-index: 10; }
         .folder-item { padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px; }
         .folder-item:hover { background: #3a3a3a; }
         .folder-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        
         .hidden { display: none !important; }
         .status-badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; margin-bottom: 10px; }
         .status-idle { background: #333; color: #aaa; }
@@ -56,8 +53,6 @@
         .status-running { background: var(--accent); color: white; animation: pulse 1.5s infinite; }
         .status-stopped { background: var(--error); color: white; }
         .user-block { display: flex; justify-content: space-between; align-items: center; background: #2a2a2a; padding: 10px; border-radius: 8px; margin-bottom: 15px; }
-        
-        /* Modal Styles */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
         .modal-content { background: #1e1e1e; border-radius: 12px; padding: 20px; max-width: 95%; max-height: 85vh; overflow-y: auto; width: 700px; border: 1px solid var(--border); position: relative; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
@@ -74,7 +69,7 @@
 </head>
 <body>
 <div class="container">
-    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.8</span></h1>
+    <h1 id="appTitle" onclick="location.reload()">🗂 Yandex Saver <span style="font-size:0.7em; color:#888">v5.8.1</span></h1>
     <p class="subtitle">Сохранение файлов с оптимизацией для мобильных и надёжной авторизацией</p>
 
     <div id="userBlock" class="user-block hidden">
@@ -96,8 +91,6 @@
             <input type="text" id="targetFolderPath" value="/saved-materials" readonly>
             <button id="browseBtn" class="btn btn-secondary" style="width:auto; margin:0; padding:8px 12px;">Обзор</button>
         </div>
-        
-        <!-- 🔥 УЛУЧШЕННЫЙ БРАУЗЕР С ФИКСИРОВАННЫМИ КНОПКАМИ -->
         <div id="folderBrowserWrapper" class="folder-browser-wrapper hidden">
             <div id="folderBrowser" class="folder-browser"></div>
             <div class="folder-actions-bar">
@@ -105,7 +98,6 @@
                 <button id="newFolderBtn" class="btn btn-secondary" style="margin:0; width:auto;">➕ Новая</button>
             </div>
         </div>
-        
         <button id="btnNextLinks" class="btn btn-primary hidden">Далее →</button>
     </div>
 
@@ -146,7 +138,6 @@
     </div>
 </div>
 
-<!-- Модальное окно отчета -->
 <div id="reportModal" class="modal-overlay">
     <div class="modal-content">
         <div class="modal-header">
@@ -157,7 +148,6 @@
     </div>
 </div>
 
-<!-- Модальное окно новой папки -->
 <div id="newFolderModal" class="modal-overlay">
     <div class="modal-content" style="width:400px;">
         <div class="modal-header">
@@ -222,6 +212,7 @@ function log(msg, type = 'info') {
     logArea.appendChild(p);
     logArea.scrollTop = logArea.scrollHeight;
     state.logs.push(p.textContent);
+    console.log(`[YS] ${msg}`);
 }
 function updateStatus(msg, statusClass = 'status-idle') {
     statusBadge.textContent = msg;
@@ -245,7 +236,15 @@ function formatSize(bytes) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
-function normalizePath(p) { if(!p) return '/'; return p.replace(/\/+/g,'/').replace(/\/$/,'') || '/'; }
+function normalizePath(p) {
+    if (!p) return '/';
+    let normalized = p.replace(/\/+/g, '/').replace(/\/$/, '');
+    return normalized || '/';
+}
+function updateTargetPreview() {
+    const v = targetPathInput.value.trim() || TARGET_FOLDER;
+    statTargetFolder.textContent = v.startsWith('/') ? v : '/' + v;
+}
 
 // ==================== АВТОРИЗАЦИЯ ====================
 function startOAuthPopup() {
@@ -297,12 +296,12 @@ async function fetchDiskInfo() {
     } catch (e) { log('Ошибка инфо о диске: ' + e.message, 'error'); }
 }
 
-// ==================== БРАУЗЕР ПАПОК (УЛУЧШЕННЫЙ) ====================
+// ==================== БРАУЗЕР ПАПОК (ИСПРАВЛЕННЫЙ) ====================
 async function showFolderBrowser() {
     let p = targetPathInput.value.trim() || '/';
     if (!p.startsWith('/')) p = '/' + p;
-    currentBrowsePath = p;
-    await loadFolderContents(p);
+    currentBrowsePath = normalizePath(p);
+    await loadFolderContents(currentBrowsePath);
     folderBrowserWrapper.classList.remove('hidden');
 }
 async function loadFolderContents(path) {
@@ -313,8 +312,9 @@ async function loadFolderContents(path) {
         const data = await res.json();
         const folders = (data._embedded?.items || []).filter(i => i.type === 'dir');
         folderBrowser.innerHTML = '';
+        // Кнопка "Наверх"
         if (path !== '/') {
-            const parent = path.substring(0, path.lastIndexOf('/')) || '/';
+            const parent = normalizePath(path.substring(0, path.lastIndexOf('/')) || '/');
             const up = document.createElement('div'); up.className = 'folder-item';
             up.innerHTML = `<span>📤</span><span class="name">.. (наверх)</span>`;
             up.onclick = () => { currentBrowsePath = parent; targetPathInput.value = parent; loadFolderContents(parent); };
@@ -326,17 +326,22 @@ async function loadFolderContents(path) {
             folders.forEach(f => {
                 const div = document.createElement('div'); div.className = 'folder-item';
                 div.innerHTML = `<span>📁</span><span class="name">${f.name}</span>`;
-                div.onclick = () => { currentBrowsePath = f.path; targetPathInput.value = f.path; loadFolderContents(f.path); };
+                div.onclick = () => { 
+                    currentBrowsePath = normalizePath(f.path); 
+                    targetPathInput.value = currentBrowsePath; 
+                    loadFolderContents(currentBrowsePath); 
+                };
                 folderBrowser.appendChild(div);
             });
         }
     } catch (e) {
         folderBrowser.innerHTML = `<div style="padding:8px; color:#f44336;">Ошибка: ${e.message}</div>`;
+        log(`❌ Ошибка загрузки папок: ${e.message}`, 'error');
     }
 }
-// 🔥 Кнопки вынесены в статичный бар — обработчики здесь:
+// 🔥 Кнопки в статичном баре:
 selectFolderBtn.onclick = () => {
-    TARGET_FOLDER = currentBrowsePath;
+    TARGET_FOLDER = normalizePath(currentBrowsePath);
     targetPathInput.value = TARGET_FOLDER;
     statTargetFolder.textContent = TARGET_FOLDER;
     folderBrowserWrapper.classList.add('hidden');
@@ -404,7 +409,7 @@ function generateReportMarkdown() {
     const s = state.stats;
     const total = s.successCount + s.duplicateCount + s.errorCount;
     const rate = total > 0 ? ((s.successCount / total) * 100).toFixed(1) : '0.0';
-    let md = `# 📄 Отчёт Yandex Saver v5.8\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
+    let md = `# 📄 Отчёт Yandex Saver v5.8.1\n\n**Дата:** ${new Date().toLocaleString('ru-RU')} | **Папка:** \`${TARGET_FOLDER}\`\n\n`;
     md += `## 📊 Сводка\n- Ссылок: ${s.totalLinks} | Папок: ${s.foldersProcessed} | Файлов: ${s.totalFiles} (${formatSize(s.totalFilesSize)})\n`;
     md += `- Успешно: ${s.successCount} (${formatSize(s.successSize)}) | Дубли: ${s.duplicateCount} (${formatSize(s.duplicateSize)}) | Ошибки: ${s.errorCount} (${formatSize(s.errorSize)})\n- Эффективность: ${rate}%\n\n`;
     if (s.errorFiles.length) { md += `## ❌ Ошибки\n`; s.errorFiles.forEach((f,i)=>md+=`${i+1}. [${f.name}](${f.url}) | ${formatSize(f.size)} | ${f.reason}\n`); md+=`\n`; }
@@ -423,14 +428,14 @@ downloadReportBtn.addEventListener('click', () => {
     log('📥 Отчёт скачан', 'success');
 });
 
-// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (ИЗ 5.5) ====================
+// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 async function ensureFolderExists(path) {
     const np = normalizePath(path);
     if (np === '/') return true;
     try {
         await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { headers: { 'Authorization': `OAuth ${TOKEN}` } });
     } catch {
-        const parent = np.substring(0, np.lastIndexOf('/')) || '/';
+        const parent = normalizePath(np.substring(0, np.lastIndexOf('/')) || '/');
         await ensureFolderExists(parent);
         const cr = await fetch(`${API}/resources?path=${encodeURIComponent(np)}`, { method: 'PUT', headers: { 'Authorization': `OAuth ${TOKEN}` } });
         if (!cr.ok && cr.status !== 409) throw new Error(`Не создать ${np}`);
@@ -451,7 +456,7 @@ async function fileExistsAtPath(fullPath) {
     } catch { return false; }
 }
 
-// ==================== ТРОТТЛЕР (ИЗ 5.5) ====================
+// ==================== ТРОТТЛЕР ====================
 class RequestThrottler {
     constructor(maxPerSecond = 3) { this.maxPerSecond = maxPerSecond; this.timestamps = []; this.minInterval = 1000 / maxPerSecond; }
     async waitIfNeeded() {
@@ -467,14 +472,13 @@ class RequestThrottler {
 }
 const throttler = new RequestThrottler(3);
 
-// ==================== ПОВТОРНЫЕ ПОПЫТКИ (ИЗ 5.5) ====================
+// ==================== ПОВТОРНЫЕ ПОПЫТКИ ====================
 async function fetchWithRetry(url, options, maxRetries = 5) {
-    let lastError, lastResponse;
+    let lastError;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             await throttler.waitIfNeeded();
             const response = await fetch(url, { ...options, signal: abortController?.signal });
-            lastResponse = response;
             if (response.ok || response.status === 202) return response;
             if (response.status === 404 && attempt < maxRetries) {
                 const delay = Math.pow(2, attempt) * 1000;
@@ -495,12 +499,12 @@ async function fetchWithRetry(url, options, maxRetries = 5) {
     throw lastError || new Error('Неизвестная ошибка');
 }
 
-// ==================== СОХРАНЕНИЕ ФАЙЛА (РЕАЛЬНАЯ ЛОГИКА 5.5 + СТАТИСТИКА) ====================
+// ==================== СОХРАНЕНИЕ ФАЙЛА ====================
 async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
     const fullPath = normalizePath(`${targetPath}/${fileName}`);
     if (await fileExistsAtPath(fullPath)) {
-        addLog(`⏭ Уже существует: ${fileName}`);
+        log(`⏭ Уже существует: ${fileName}`, 'warn');
         state.stats.duplicateCount++;
         state.stats.duplicateFiles.push({ name: fileName, url: sourceUrl, size: 0 });
         return { skipped: true, reason: 'exists' };
@@ -508,7 +512,7 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
     updateStatus(`💾 ${fileName}`); log(`⬇️ Сохраняю: ${fileName}`);
     const params = new URLSearchParams({ public_key: publicKey, path: filePathInPublic, save_path: normalizePath(targetPath), name: fileName });
     const response = await fetchWithRetry(`${API}/public/resources/save-to-disk?${params}`, { method: 'POST', headers: { 'Authorization': `OAuth ${TOKEN}` } });
-    if (response.status === 202) { log(`⏳ В очереди: ${fileName}`); state.stats.successCount++; state.stats.successFiles.push({ name: fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 }); return { saved: true }; }
+    if (response.status === 202) { log(`⏳ В очереди: ${fileName}`, 'info'); state.stats.successCount++; state.stats.successFiles.push({ name: fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 }); return { saved: true }; }
     if (!response.ok) {
         const t = await response.text().catch(() => '');
         state.stats.errorCount++;
@@ -518,14 +522,14 @@ async function savePublicFile(publicKey, filePathInPublic, targetPath, fileName,
     }
     const result = await response.json();
     if (result.href || result.path || result.name) {
-        log(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`);
+        log(`✅ Сохранено: ${normalizePath(`${targetPath}/${result.name || fileName}`)}`, 'success');
         state.stats.successCount++; state.stats.successFiles.push({ name: result.name || fileName, url: `${API}/resources?path=${encodeURIComponent(fullPath)}`, size: 0 });
         return { saved: true };
     }
     throw new Error('Неожиданный ответ API');
 }
 
-// ==================== ОБРАБОТКА ПАПОК (РЕКУРСИВНАЯ ЛОГИКА 5.5) ====================
+// ==================== ОБРАБОТКА ПАПОК (РЕКУРСИВНАЯ) ====================
 async function processPublicFolder(publicKey, targetBasePath, publicFolderName, sourceUrl) {
     if (!isRunning) throw new Error('Остановлено');
     const rootTargetPath = normalizePath(`${targetBasePath}/${publicFolderName}`);
@@ -541,7 +545,7 @@ async function processPublicFolder(publicKey, targetBasePath, publicFolderName, 
         const items = data._embedded?.items || data.items || [];
         for (const item of items) {
             if (!isRunning) throw new Error('Остановлено');
-            if (processedPublicPaths.has(item.path)) { log(`⚠️ Пропуск: ${item.path}`); continue; }
+            if (processedPublicPaths.has(item.path)) { log(`⚠️ Пропуск: ${item.path}`, 'warn'); continue; }
             processedPublicPaths.add(item.path);
             const relativePath = item.path.startsWith('/') ? item.path.substring(1) : item.path;
             const itemTargetPath = normalizePath(`${rootTargetPath}/${relativePath}`);
@@ -608,7 +612,7 @@ async function processPublicLink(publicUrl, targetBasePath) {
     } else throw new Error(`Неизвестный тип: ${meta.type}`);
 }
 
-// ==================== РАСЧЁТ РАЗМЕРА (ДЛЯ ПРЕДПРОСМОТРА) ====================
+// ==================== РАСЧЁТ РАЗМЕРА ====================
 async function calculatePublicFolderSize(publicKey, limit = 1000) {
     let totalSize = 0; let fileCount = 0;
     let url = `${API}/public/resources?public_key=${encodeURIComponent(publicKey)}&limit=${limit}`;
@@ -626,19 +630,25 @@ async function calculatePublicFolderSize(publicKey, limit = 1000) {
     return { totalSize, fileCount };
 }
 
-// ==================== ОСНОВНОЙ ПРОЦЕСС ====================
+// ==================== ОСНОВНОЙ ПРОЦЕСС (ИСПРАВЛЕННЫЙ) ====================
 async function startProcess() {
     // Сброс статистики
     state.stats = { totalLinks:0, foldersProcessed:0, totalFiles:0, totalFilesSize:0, successCount:0, successSize:0, successFiles:[], duplicateCount:0, duplicateSize:0, duplicateFiles:[], errorCount:0, errorSize:0, errorFiles:[], failedItems:[] };
     
-    const raw = linksInput.value.trim(); if (!raw) return alert('⚠️ Вставьте ссылки');
-    const links = parseLinks(raw); if (!links.length) return alert('❌ Нет корректных ссылок');
+    const raw = linksInput.value.trim(); 
+    if (!raw) { alert('⚠️ Вставьте ссылки'); return; }
+    const links = parseLinks(raw); 
+    if (!links.length) { alert('❌ Нет корректных ссылок'); return; }
     state.stats.totalLinks = links.length;
-    if (!TARGET_FOLDER) { TARGET_FOLDER = normalizePath(targetPathInput.value.trim() || '/saved-materials'); targetPathInput.value = TARGET_FOLDER; updateTargetPreview(); }
+    
+    if (!TARGET_FOLDER) { 
+        TARGET_FOLDER = normalizePath(targetPathInput.value.trim() || '/saved-materials'); 
+        targetPathInput.value = TARGET_FOLDER; 
+        updateTargetPreview(); 
+    }
     await updateDiskInfoDisplay();
     
     // Сканирование размера
-    document.getElementById('scan-status')?.classList.add('active'); updateStatus('⏳ Сканирую размер...');
     let totalRequiredSize = 0;
     for (const link of links) {
         try {
@@ -650,8 +660,7 @@ async function startProcess() {
             else if (meta.type === 'dir' || meta._embedded?.items) { const sizeInfo = await calculatePublicFolderSize(link); totalRequiredSize += sizeInfo.totalSize; }
         } catch (e) { log(`⚠️ Не просканировать ${link}: ${e.message}`, 'warn'); }
     }
-    document.getElementById('scan-status')?.classList.remove('active');
-    if (document.getElementById('required-space')) document.getElementById('required-space').textContent = formatSize(totalRequiredSize);
+    if (statRequiredSize) statRequiredSize.textContent = formatSize(totalRequiredSize);
     
     isRunning = true; abortController = new AbortController(); processedPublicPaths.clear();
     startBtn.disabled = true; stopBtn.disabled = false; reportButtons.classList.add('hidden');
@@ -681,10 +690,20 @@ async function startProcess() {
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 window.addEventListener('DOMContentLoaded', async () => {
-    targetPathInput.value = TARGET_FOLDER; statTargetFolder.textContent = TARGET_FOLDER;
-    if (TOKEN) { log('Найден токен, проверяем...', 'info'); await verifyTokenAndProceed(TOKEN); }
-    else { log('Требуется авторизация', 'info'); updateStatus('Не авторизован', 'status-idle'); }
+    // Инициализация значений по умолчанию
+    targetPathInput.value = TARGET_FOLDER;
+    statTargetFolder.textContent = TARGET_FOLDER;
     
+    // Проверка сохранённого токена
+    if (TOKEN) {
+        log('Найден сохранённый токен, проверяем...', 'info');
+        await verifyTokenAndProceed(TOKEN);
+    } else {
+        log('Требуется авторизация', 'info');
+        updateStatus('Не авторизован', 'status-idle');
+    }
+    
+    // Привязка событий
     authBtn.addEventListener('click', startOAuthPopup);
     logoutBtn.addEventListener('click', logout);
     browseBtn.addEventListener('click', showFolderBrowser);
@@ -692,7 +711,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     startBtn.addEventListener('click', startProcess);
     stopBtn.addEventListener('click', () => { if (abortController) abortController.abort(); });
     copyLogBtn.addEventListener('click', () => { if(state.logs.length) navigator.clipboard.writeText(state.logs.join('\n')).then(()=>log('📋 Лог скопирован','success')); });
-    log('Система готова.', 'info');
+    
+    log('Система инициализирована. Подключите Яндекс.Диск для начала работы.', 'info');
 });
 </script>
 </body>
